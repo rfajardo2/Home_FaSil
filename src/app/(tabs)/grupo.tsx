@@ -1,4 +1,4 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { getCategory } from '@/components/CategoryIcon';
@@ -8,7 +8,9 @@ import { Card } from '@/components/ui/Card';
 import { IconCircle } from '@/components/ui/IconCircle';
 import { Fonts, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { ACHIEVEMENTS, GROUPS, MEMBERS } from '@/data/mock';
+import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
+import { isSupabaseConfigured } from '@/lib/supabase';
 
 const activeGroup = GROUPS.find((g) => g.active)!;
 const ranked = [...MEMBERS].sort((a, b) => b.points - a.points);
@@ -17,6 +19,7 @@ const pointsToNextLevel = 400;
 
 export default function GrupoScreen() {
   const theme = useTheme();
+  const { signOut } = useAuth();
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top']}>
@@ -123,6 +126,12 @@ export default function GrupoScreen() {
               </Text>
             </Card>
           </Section>
+
+          {isSupabaseConfigured && (
+            <Pressable style={styles.signOut} onPress={() => signOut()}>
+              <Text style={{ color: theme.danger, fontFamily: Fonts.bodyBold, fontSize: 13 }}>Cerrar sesión</Text>
+            </Pressable>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -170,4 +179,5 @@ const styles = StyleSheet.create({
   progressHeaderRow: { flexDirection: 'row', justifyContent: 'space-between' },
   barTrack: { height: 9, borderRadius: Radii.pill, overflow: 'hidden' },
   barFill: { height: '100%', borderRadius: Radii.pill },
+  signOut: { alignItems: 'center', marginTop: Spacing.six, paddingVertical: Spacing.three },
 });
