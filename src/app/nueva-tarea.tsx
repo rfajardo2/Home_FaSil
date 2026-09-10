@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { categoryStyle } from '@/components/category-style';
-import { CalendarIcon, PlusIcon } from '@/components/icons';
+import { PlusIcon } from '@/components/icons';
 import { Avatar } from '@/components/ui/Avatar';
 import { PrimaryButton } from '@/components/ui/Button';
 import { Header } from '@/components/ui/Header';
@@ -22,6 +22,19 @@ const FREQUENCY_OPTIONS: { value: TaskRow['recurrence']; label: string }[] = [
   { value: 'monthly', label: 'Mensual' },
 ];
 
+const DUE_DATE_OPTIONS = [
+  { offset: 0, label: 'Hoy' },
+  { offset: 1, label: 'Mañana' },
+  { offset: 3, label: 'En 3 días' },
+  { offset: 7, label: 'Próxima semana' },
+];
+
+function addDays(offset: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  return d.toISOString().slice(0, 10);
+}
+
 export default function NuevaTareaScreen() {
   const theme = useTheme();
   const { session } = useAuth();
@@ -31,6 +44,7 @@ export default function NuevaTareaScreen() {
   const [assignMode, setAssignMode] = useState<'alguien' | 'abierta'>('alguien');
   const [assigneeId, setAssigneeId] = useState<string | null>(session?.user?.id ?? members[0]?.id ?? null);
   const [frequency, setFrequency] = useState<TaskRow['recurrence']>('none');
+  const [dueOffset, setDueOffset] = useState(0);
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -54,7 +68,7 @@ export default function NuevaTareaScreen() {
       categoryId,
       assigneeId: assignMode === 'abierta' ? null : assigneeId,
       recurrence: frequency,
-      dueDate: new Date().toISOString().slice(0, 10),
+      dueDate: addDays(dueOffset),
       notes: notes.trim() || null,
     });
     setSaving(false);
@@ -161,12 +175,11 @@ export default function NuevaTareaScreen() {
           </Field>
 
           <Field label="Fecha límite">
-            <View style={[styles.input, styles.dateRow, { borderColor: theme.border, backgroundColor: theme.surface }]}>
-              <Text style={{ color: theme.text, fontFamily: Fonts.body, fontSize: 14.5 }}>
-                {new Date().toLocaleDateString('es', { day: 'numeric', month: 'short' })}
-              </Text>
-              <CalendarIcon size={17} color={theme.textSecondary} />
-            </View>
+            <SegmentedControl
+              value={String(dueOffset)}
+              onChange={(v) => setDueOffset(Number(v))}
+              options={DUE_DATE_OPTIONS.map((o) => ({ value: String(o.offset), label: o.label }))}
+            />
           </Field>
 
           <Field label="Notas">
@@ -218,7 +231,6 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.body,
   },
   textarea: { height: 76, textAlignVertical: 'top' },
-  dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   wrapRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   pill: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: Radii.pill, borderWidth: 1 },
   dashedPill: { flexDirection: 'row', alignItems: 'center', borderStyle: 'dashed' },

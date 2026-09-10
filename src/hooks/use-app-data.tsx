@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import { CATEGORIES } from '@/constants/theme';
@@ -159,6 +160,7 @@ type AppDataContextValue = {
   notifications: NotificationRow[];
   createGroup: (name: string, emoji: string) => Promise<{ error: string | null }>;
   joinGroupByCode: (code: string) => Promise<{ error: string | null }>;
+  leaveGroup: (groupId: string) => Promise<{ error: string | null }>;
   createCategory: (name: string, icon: string, color: string) => Promise<{ error: string | null }>;
   createTask: (input: NewTaskInput) => Promise<{ error: string | null }>;
   toggleTask: (task: TaskRow) => Promise<void>;
@@ -188,10 +190,24 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [expenses, setExpenses] = useState<ExpenseRow[]>(isSupabaseConfigured ? [] : MOCK_EXPENSES);
   const [notifications, setNotifications] = useState<NotificationRow[]>(isSupabaseConfigured ? [] : MOCK_NOTIFICATIONS);
 
+  const activeGroupStorageKey = (forUserId: string) => `home-hub:active-group:${forUserId}`;
+
+  const persistActiveGroupId = useCallback(
+    (id: string | null) => {
+      if (!userId) return;
+      const key = activeGroupStorageKey(userId);
+      (id ? AsyncStorage.setItem(key, id) : AsyncStorage.removeItem(key)).catch(() => {});
+    },
+    [userId],
+  );
+
   const loadGroups = useCallback(async (): Promise<GroupMembership[]> => {
     if (!isSupabaseConfigured || !userId) return [];
     setGroupsLoading(true);
-    const { data, error } = await supabase.from('group_members').select('role, points, groups(*)').eq('profile_id', userId);
+    const [{ data, error }, storedGroupId] = await Promise.all([
+      supabase.from('group_members').select('role, points, groups(*)').eq('profile_id', userId),
+      AsyncStorage.getItem(activeGroupStorageKey(userId)).catch(() => null),
+    ]);
     setGroupsLoading(false);
     if (error) {
       console.warn('[app-data] no se pudieron cargar los grupos:', error.message);
@@ -201,9 +217,19 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       .filter((row: any) => row.groups)
       .map((row: any) => ({ ...row.groups, role: row.role, points: row.points }));
     setGroups(rows);
-    setActiveGroupIdState((current) => (current && rows.some((g) => g.id === current) ? current : (rows[0]?.id ?? null)));
+    let resolvedActiveId: string | null = null;
+    setActiveGroupIdState((current) => {
+      resolvedActiveId =
+        current && rows.some((g) => g.id === current)
+          ? current
+          : storedGroupId && rows.some((g) => g.id === storedGroupId)
+            ? storedGroupId
+            : (rows[0]?.id ?? null);
+      return resolvedActiveId;
+    });
+    persistActiveGroupId(resolvedActiveId);
     return rows;
-  }, [userId]);
+  }, [userId, persistActiveGroupId]);
 
   const loadNotifications = useCallback(async () => {
     if (!isSupabaseConfigured || !userId) return;
@@ -289,7 +315,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     if (error) return { error: error.message };
     const refreshed = await loadGroups();
     const created = refreshed.find((g) => !previousIds.has(g.id));
-    setActiveGroupIdState(created?.id ?? refreshed[0]?.id ?? null);
+    const newActiveId = created?.id ?? refreshed[0]?.id ?? null;
+    setActiveGroupIdState(newActiveId);
+    persistActiveGroupId(newActiveId);
     return { error: null };
   }
 
@@ -301,6 +329,20 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     if (error) return { error: traducirErrorPostgres(error.message) };
     await loadGroups();
     setActiveGroupIdState(data.id);
+    persistActiveGroupId(data.id);
+    return { error: null };
+  }
+
+  async function leaveGroup(groupId: string): Promise<{ error: string | null }> {
+    if (!isSupabaseConfigured || !userId) return { error: 'Supabase no está configurado.' };
+    const { error } = await supabase.from('group_members').delete().eq('group_id', groupId).eq('profile_id', userId);
+    if (error) return { error: error.message };
+    const refreshed = await loadGroups();
+    if (activeGroupId === groupId) {
+      const nextActiveId = refreshed[0]?.id ?? null;
+      setActiveGroupIdState(nextActiveId);
+      persistActiveGroupId(nextActiveId);
+    }
     return { error: null };
   }
 
@@ -462,7 +504,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     loading: groupsLoading || contentLoading,
     groups,
     activeGroup,
-    setActiveGroupId: setActiveGroupIdState,
+    setActiveGroupId: (id) => {
+      setActiveGroupIdState(id);
+      persistActiveGroupId(id);
+    },
     members,
     categories,
     tasks,
@@ -471,6 +516,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     notifications,
     createGroup,
     joinGroupByCode,
+    leaveGroup,
     createCategory,
     createTask,
     toggleTask,

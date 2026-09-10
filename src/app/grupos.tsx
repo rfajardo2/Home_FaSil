@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -15,7 +16,15 @@ const ROLE_LABEL = { admin: 'Administrador', member: 'Miembro' } as const;
 
 export default function GruposScreen() {
   const theme = useTheme();
-  const { groups, activeGroup, setActiveGroupId } = useAppData();
+  const { groups, activeGroup, setActiveGroupId, leaveGroup } = useAppData();
+  const [leavingId, setLeavingId] = useState<string | null>(null);
+
+  async function handleLeave(groupId: string) {
+    if (leavingId) return;
+    setLeavingId(groupId);
+    await leaveGroup(groupId);
+    setLeavingId(null);
+  }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top']}>
@@ -25,8 +34,8 @@ export default function GruposScreen() {
           {groups.map((group) => {
             const active = group.id === activeGroup?.id;
             return (
-              <Pressable key={group.id} onPress={() => setActiveGroupId(group.id)}>
-                <Card style={styles.groupRow} padding={15} outlined={active} outlineColor={theme.primary}>
+              <Card key={group.id} style={styles.groupRow} padding={15} outlined={active} outlineColor={theme.primary}>
+                <Pressable style={styles.selectArea} onPress={() => setActiveGroupId(group.id)}>
                   <IconCircle size={46} background={active ? theme.primary : theme.surfaceAlt}>
                     <HomeIcon size={21} color={active ? theme.primaryOn : AccentColors.avatar2} />
                   </IconCircle>
@@ -50,8 +59,13 @@ export default function GruposScreen() {
                   ) : (
                     <ChevronRightIcon size={17} color={theme.textFaint} />
                   )}
-                </Card>
-              </Pressable>
+                </Pressable>
+                <Pressable onPress={() => handleLeave(group.id)} style={styles.leaveBtn} hitSlop={8}>
+                  <Text style={{ color: theme.danger, fontFamily: Fonts.bodyMedium, fontSize: 11.5 }}>
+                    {leavingId === group.id ? 'Saliendo...' : 'Salir del grupo'}
+                  </Text>
+                </Pressable>
+              </Card>
             );
           })}
 
@@ -71,9 +85,11 @@ export default function GruposScreen() {
 const styles = StyleSheet.create({
   scroll: { alignItems: 'center', paddingBottom: Spacing.eight },
   center: { width: '100%', maxWidth: MaxContentWidth, paddingHorizontal: Spacing.five, gap: Spacing.three },
-  groupRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
+  groupRow: { gap: Spacing.two },
+  selectArea: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   flexGrow: { flex: 1, minWidth: 0 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   activeBadge: { paddingVertical: 2, paddingHorizontal: 7, borderRadius: Radii.pill },
   checkDot: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  leaveBtn: { alignSelf: 'flex-end' },
 });

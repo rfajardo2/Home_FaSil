@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -63,8 +64,9 @@ export default function CategoriasScreen() {
               {categories.map((c, i) => {
                 const style = categoryStyle(c);
                 return (
-                  <View
+                  <Pressable
                     key={c.id}
+                    onPress={() => router.push({ pathname: '/tareas', params: { category: c.id } })}
                     style={[
                       styles.row,
                       i < categories.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border },
@@ -79,7 +81,7 @@ export default function CategoriasScreen() {
                       </Text>
                     </View>
                     <ChevronRightIcon size={15} color={theme.textFaint} />
-                  </View>
+                  </Pressable>
                 );
               })}
             </Card>

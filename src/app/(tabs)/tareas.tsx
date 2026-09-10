@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -25,7 +25,8 @@ const FREQUENCY_LABEL: Record<TaskRow['recurrence'], string> = {
 export default function TareasScreen() {
   const theme = useTheme();
   const { categories, members, tasks, toggleTask, claimTask } = useAppData();
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const { category: categoryParam } = useLocalSearchParams<{ category?: string }>();
+  const [activeCategory, setActiveCategory] = useState<string | null>(categoryParam ?? null);
 
   const findMember = (id: string | null) => members.find((m) => m.id === id);
 
