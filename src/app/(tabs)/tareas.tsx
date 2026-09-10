@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { categoryStyle } from '@/components/category-style';
-import { PlusIcon, RepeatIcon, SearchIcon } from '@/components/icons';
+import { CalendarIcon, PlusIcon, RepeatIcon, SearchIcon } from '@/components/icons';
 import { Card } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
 import { IconCircle } from '@/components/ui/IconCircle';
@@ -45,6 +45,11 @@ export default function TareasScreen() {
         <View style={styles.headerRow}>
           <Text style={[styles.title, { color: theme.text, fontFamily: Fonts.display }]}>Tareas</Text>
           <View style={styles.headerActions}>
+            <Pressable
+              onPress={() => router.push('/calendario')}
+              style={[styles.iconBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <CalendarIcon size={17} color={theme.textSecondary} />
+            </Pressable>
             <Pressable style={[styles.iconBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <SearchIcon size={17} color={theme.textSecondary} />
             </Pressable>

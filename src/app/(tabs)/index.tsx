@@ -207,7 +207,7 @@ export default function InicioScreen() {
           <View style={styles.quickRow}>
             <QuickAction label="Tarea" primary onPress={() => router.push('/nueva-tarea')} />
             <QuickAction label="Gasto" onPress={() => router.push('/nuevo-gasto')} />
-            <QuickAction label="Evento" onPress={() => router.push('/nueva-tarea')} />
+            <QuickAction label="Evento" onPress={() => router.push('/calendario')} />
           </View>
             </>
           )}
