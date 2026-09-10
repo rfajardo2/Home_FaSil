@@ -152,6 +152,33 @@ create policy "users can leave a group / admins can remove members"
   to authenticated
   using (profile_id = auth.uid() or public.is_group_admin(group_id));
 
+-- Joining a group by invite code needs to look up a group the user isn't a
+-- member of yet, which the "members can view their groups" select policy
+-- above deliberately blocks. This SECURITY DEFINER function does the lookup
+-- and membership insert atomically, without ever exposing groups the caller
+-- doesn't already belong to through a general-purpose select.
+create or replace function public.join_group_by_invite_code(code text)
+returns public.groups
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target public.groups;
+begin
+  select * into target from public.groups where invite_code = code;
+  if target.id is null then
+    raise exception 'Código de invitación inválido.';
+  end if;
+  insert into public.group_members (group_id, profile_id)
+  values (target.id, auth.uid())
+  on conflict (group_id, profile_id) do nothing;
+  return target;
+end;
+$$;
+
+grant execute on function public.join_group_by_invite_code(text) to authenticated;
+
 -- ----------------------------------------------------------------------------
 -- categories  (per-group; defaults seeded + custom ones allowed)
 -- ----------------------------------------------------------------------------
@@ -196,11 +223,11 @@ set search_path = public
 as $$
 begin
   insert into public.categories (group_id, name, icon, color, is_default) values
-    (new.id, 'Cocina', 'chef-hat', '#DC932E', true),
-    (new.id, 'Limpieza', 'sparkles', '#30A4AA', true),
+    (new.id, 'Cocina', 'utensils', '#DC932E', true),
+    (new.id, 'Limpieza', 'droplet', '#30A4AA', true),
     (new.id, 'Servicios', 'bolt', '#427FD8', true),
     (new.id, 'Mantenimiento', 'wrench', '#825EB9', true),
-    (new.id, 'Eventos', 'calendar', '#DF5770', true);
+    (new.id, 'Eventos', 'gift', '#DF5770', true);
   return new;
 end;
 $$;

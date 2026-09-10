@@ -11,6 +11,7 @@ import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { Colors } from '@/constants/theme';
+import { AppDataProvider } from '@/hooks/use-app-data';
 import { AuthProvider, useAuth } from '@/hooks/use-auth';
 import { isSupabaseConfigured } from '@/lib/supabase';
 
@@ -32,7 +33,9 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <Navigation />
+      <AppDataProvider>
+        <Navigation />
+      </AppDataProvider>
     </AuthProvider>
   );
 }

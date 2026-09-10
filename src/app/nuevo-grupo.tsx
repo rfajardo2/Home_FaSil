@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,21 +7,62 @@ import { HeartIcon, HomeIcon, StarIcon, UsersIcon } from '@/components/icons';
 import { PrimaryButton } from '@/components/ui/Button';
 import { Header } from '@/components/ui/Header';
 import { AccentColors, BottomTabInset, Fonts, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
+import { useAppData } from '@/hooks/use-app-data';
 import { useTheme } from '@/hooks/use-theme';
 
 const GROUP_COLORS = [AccentColors.avatar1, AccentColors.avatar2, AccentColors.avatar3, AccentColors.avatar4, AccentColors.avatar5];
 const GROUP_ICONS = [HomeIcon, UsersIcon, HeartIcon, StarIcon];
+const GROUP_EMOJIS = ['🏠', '👨‍👩‍👧‍👦', '❤️', '⭐'];
 
 export default function NuevoGrupoScreen() {
   const theme = useTheme();
+  const { groups, createGroup, joinGroupByCode } = useAppData();
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [colorIndex, setColorIndex] = useState(0);
   const [iconIndex, setIconIndex] = useState(0);
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [joining, setJoining] = useState(false);
+  const [creating, setCreating] = useState(false);
+
+  // Users land here forcibly when they have zero groups (see (tabs)/_layout.tsx);
+  // once they gain one, go straight to the app instead of leaving them stuck here.
+  const canGoBack = groups.length > 0;
+
+  async function handleJoin() {
+    if (joining) return;
+    setJoinError(null);
+    setJoining(true);
+    const { error } = await joinGroupByCode(code);
+    setJoining(false);
+    if (error) {
+      setJoinError(error);
+      return;
+    }
+    router.replace('/');
+  }
+
+  async function handleCreate() {
+    if (creating) return;
+    setCreateError(null);
+    if (!name.trim()) {
+      setCreateError('Ponle un nombre a tu grupo.');
+      return;
+    }
+    setCreating(true);
+    const { error } = await createGroup(name.trim(), GROUP_EMOJIS[iconIndex]);
+    setCreating(false);
+    if (error) {
+      setCreateError(error);
+      return;
+    }
+    router.replace('/');
+  }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top', 'bottom']}>
-      <Header title="Nuevo grupo" showBack size="md" />
+      <Header title="Nuevo grupo" showBack={canGoBack} size="md" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.center}>
           <Field label="Unirme con un código de invitación">
@@ -33,10 +75,13 @@ export default function NuevoGrupoScreen() {
                 autoCapitalize="characters"
                 style={[styles.input, styles.flexGrow, { color: theme.text, borderColor: theme.border, backgroundColor: theme.surface }]}
               />
-              <Pressable style={[styles.joinBtn, { backgroundColor: theme.surfaceAlt }]}>
-                <Text style={{ color: theme.text, fontFamily: Fonts.bodyBold, fontSize: 13.5 }}>Unirme</Text>
+              <Pressable onPress={handleJoin} style={[styles.joinBtn, { backgroundColor: theme.surfaceAlt }]}>
+                <Text style={{ color: theme.text, fontFamily: Fonts.bodyBold, fontSize: 13.5 }}>
+                  {joining ? '...' : 'Unirme'}
+                </Text>
               </Pressable>
             </View>
+            {joinError && <Text style={{ color: theme.danger, fontFamily: Fonts.body, fontSize: 12 }}>{joinError}</Text>}
           </Field>
 
           <View style={styles.dividerRow}>
@@ -92,11 +137,13 @@ export default function NuevoGrupoScreen() {
               ))}
             </View>
           </Field>
+
+          {createError && <Text style={{ color: theme.danger, fontFamily: Fonts.body, fontSize: 12.5 }}>{createError}</Text>}
         </View>
       </ScrollView>
 
       <View style={[styles.ctaWrap, { paddingBottom: BottomTabInset + Spacing.three }]}>
-        <PrimaryButton label="Crear grupo" />
+        <PrimaryButton label={creating ? 'Creando...' : 'Crear grupo'} onPress={handleCreate} />
       </View>
     </SafeAreaView>
   );

@@ -1,34 +1,69 @@
-import { useState } from 'react';
+import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { categoryStyle } from '@/components/category-style';
 import { CalendarIcon, PlusIcon } from '@/components/icons';
 import { Avatar } from '@/components/ui/Avatar';
 import { PrimaryButton } from '@/components/ui/Button';
 import { Header } from '@/components/ui/Header';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
-import { BottomTabInset, CATEGORIES, Fonts, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
-import { MEMBERS } from '@/data/mock';
+import { BottomTabInset, Fonts, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
+import { useAppData } from '@/hooks/use-app-data';
+import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
-import type { CategoryId } from '@/constants/theme';
-import type { TaskFrequency } from '@/types';
-import { router } from 'expo-router';
+import type { TaskRow } from '@/lib/database-types';
 
-const FREQUENCY_OPTIONS: { value: TaskFrequency; label: string }[] = [
-  { value: 'una_vez', label: 'Una vez' },
-  { value: 'diaria', label: 'Diaria' },
-  { value: 'semanal', label: 'Semanal' },
-  { value: 'mensual', label: 'Mensual' },
+const FREQUENCY_OPTIONS: { value: TaskRow['recurrence']; label: string }[] = [
+  { value: 'none', label: 'Una vez' },
+  { value: 'daily', label: 'Diaria' },
+  { value: 'weekly', label: 'Semanal' },
+  { value: 'monthly', label: 'Mensual' },
 ];
 
 export default function NuevaTareaScreen() {
   const theme = useTheme();
-  const [title, setTitle] = useState('Lavar los platos');
-  const [categoryId, setCategoryId] = useState<CategoryId>('cocina');
+  const { session } = useAuth();
+  const { categories, members, createTask } = useAppData();
+  const [title, setTitle] = useState('');
+  const [categoryId, setCategoryId] = useState<string | null>(null);
   const [assignMode, setAssignMode] = useState<'alguien' | 'abierta'>('alguien');
-  const [assigneeId, setAssigneeId] = useState(MEMBERS[1].id);
-  const [frequency, setFrequency] = useState<TaskFrequency>('diaria');
+  const [assigneeId, setAssigneeId] = useState<string | null>(session?.user?.id ?? members[0]?.id ?? null);
+  const [frequency, setFrequency] = useState<TaskRow['recurrence']>('none');
   const [notes, setNotes] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Categories load asynchronously; default to the first one once they arrive
+  // (but don't clobber a choice the user already made).
+  useEffect(() => {
+    setCategoryId((current) => current ?? categories[0]?.id ?? null);
+  }, [categories]);
+
+  async function handleSave() {
+    if (saving) return;
+    setError(null);
+    if (!title.trim()) {
+      setError('Ponle un título a la tarea.');
+      return;
+    }
+    setSaving(true);
+    const { error: saveError } = await createTask({
+      title: title.trim(),
+      categoryId,
+      assigneeId: assignMode === 'abierta' ? null : assigneeId,
+      recurrence: frequency,
+      dueDate: new Date().toISOString().slice(0, 10),
+      notes: notes.trim() || null,
+    });
+    setSaving(false);
+    if (saveError) {
+      setError(saveError);
+      return;
+    }
+    router.back();
+  }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top', 'bottom']}>
@@ -37,9 +72,7 @@ export default function NuevaTareaScreen() {
         showBack
         size="md"
         right={
-          <Pressable
-            onPress={() => router.back()}
-            style={[styles.saveBtn, { backgroundColor: theme.primary }]}>
+          <Pressable onPress={handleSave} style={[styles.saveBtn, { backgroundColor: theme.primary }]}>
             <PlusIcon size={16} color={theme.primaryOn} strokeWidth={2.4} />
           </Pressable>
         }
@@ -51,24 +84,27 @@ export default function NuevaTareaScreen() {
             <TextInput
               value={title}
               onChangeText={setTitle}
+              placeholder="Ej. Lavar los platos"
+              placeholderTextColor={theme.textFaint}
               style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.surface }]}
             />
           </Field>
 
           <Field label="Categoría">
             <View style={styles.wrapRow}>
-              {CATEGORIES.map((c) => {
+              {categories.map((c) => {
                 const selected = categoryId === c.id;
+                const style = categoryStyle(c);
                 return (
                   <Pressable
                     key={c.id}
                     onPress={() => setCategoryId(c.id)}
                     style={[
                       styles.pill,
-                      { backgroundColor: selected ? c.color : theme.surface, borderColor: selected ? c.color : theme.border },
+                      { backgroundColor: selected ? style.color : theme.surface, borderColor: selected ? style.color : theme.border },
                     ]}>
-                    <Text style={{ color: selected ? '#fff' : c.color, fontFamily: Fonts.bodyBold, fontSize: 13 }}>
-                      {c.label}
+                    <Text style={{ color: selected ? '#fff' : style.color, fontFamily: Fonts.bodyBold, fontSize: 13 }}>
+                      {c.name}
                     </Text>
                   </Pressable>
                 );
@@ -93,11 +129,11 @@ export default function NuevaTareaScreen() {
             />
             {assignMode === 'alguien' ? (
               <View style={styles.avatarRow}>
-                {MEMBERS.map((m) => (
+                {members.map((m) => (
                   <Pressable key={m.id} onPress={() => setAssigneeId(m.id)} style={styles.avatarCol}>
                     <Avatar
                       initials={m.initials}
-                      color={m.avatarColor}
+                      color={m.avatar_color}
                       size={50}
                       selected={assigneeId === m.id}
                       faded={assigneeId !== m.id}
@@ -108,7 +144,7 @@ export default function NuevaTareaScreen() {
                         fontFamily: Fonts.bodyMedium,
                         fontSize: 11,
                       }}>
-                      {m.isYou ? 'Tú' : m.name}
+                      {m.id === session?.user?.id ? 'Tú' : m.name}
                     </Text>
                   </Pressable>
                 ))}
@@ -121,12 +157,14 @@ export default function NuevaTareaScreen() {
           </Field>
 
           <Field label="Frecuencia">
-            <SegmentedControl value={frequency} onChange={(v) => setFrequency(v as TaskFrequency)} options={FREQUENCY_OPTIONS} />
+            <SegmentedControl value={frequency} onChange={(v) => setFrequency(v as TaskRow['recurrence'])} options={FREQUENCY_OPTIONS} />
           </Field>
 
           <Field label="Fecha límite">
             <View style={[styles.input, styles.dateRow, { borderColor: theme.border, backgroundColor: theme.surface }]}>
-              <Text style={{ color: theme.text, fontFamily: Fonts.body, fontSize: 14.5 }}>Hoy, 10 sept</Text>
+              <Text style={{ color: theme.text, fontFamily: Fonts.body, fontSize: 14.5 }}>
+                {new Date().toLocaleDateString('es', { day: 'numeric', month: 'short' })}
+              </Text>
               <CalendarIcon size={17} color={theme.textSecondary} />
             </View>
           </Field>
@@ -145,11 +183,13 @@ export default function NuevaTareaScreen() {
               ]}
             />
           </Field>
+
+          {error && <Text style={{ color: theme.danger, fontFamily: Fonts.body, fontSize: 12.5 }}>{error}</Text>}
         </View>
       </ScrollView>
 
       <View style={[styles.ctaWrap, { paddingBottom: BottomTabInset + Spacing.three }]}>
-        <PrimaryButton label="Guardar tarea" onPress={() => router.back()} />
+        <PrimaryButton label={saving ? 'Guardando...' : 'Guardar tarea'} onPress={handleSave} />
       </View>
     </SafeAreaView>
   );

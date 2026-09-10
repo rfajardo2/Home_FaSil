@@ -3,34 +3,39 @@ import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { CategoryIcon, getCategory } from '@/components/CategoryIcon';
+import { categoryStyle } from '@/components/category-style';
 import { PlusIcon, RepeatIcon, SearchIcon } from '@/components/icons';
 import { Card } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
+import { IconCircle } from '@/components/ui/IconCircle';
 import { StatusCheck } from '@/components/ui/StatusCheck';
-import { CATEGORIES, Fonts, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
-import { findMember, TASKS } from '@/data/mock';
+import { Fonts, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
+import { useAppData } from '@/hooks/use-app-data';
 import { useTheme } from '@/hooks/use-theme';
-import type { Task } from '@/types';
+import type { TaskRow } from '@/lib/database-types';
+import { taskDueLabel } from '@/lib/task-due-label';
 
-const FREQUENCY_LABEL: Record<Task['frequency'], string> = {
-  una_vez: 'Una vez',
-  diaria: 'Diaria',
-  semanal: 'Semanal',
-  mensual: 'Mensual',
+const FREQUENCY_LABEL: Record<TaskRow['recurrence'], string> = {
+  none: 'Una vez',
+  daily: 'Diaria',
+  weekly: 'Semanal',
+  monthly: 'Mensual',
 };
 
 export default function TareasScreen() {
   const theme = useTheme();
+  const { categories, members, tasks, toggleTask, claimTask } = useAppData();
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
+  const findMember = (id: string | null) => members.find((m) => m.id === id);
+
   const visible = useMemo(
-    () => (activeCategory ? TASKS.filter((t) => t.categoryId === activeCategory) : TASKS),
-    [activeCategory],
+    () => (activeCategory ? tasks.filter((t) => t.category_id === activeCategory) : tasks),
+    [activeCategory, tasks],
   );
-  const openTasks = visible.filter((t) => t.assigneeId === null);
-  const todayTasks = visible.filter((t) => t.assigneeId !== null && t.dueLabel === 'Hoy');
-  const weekTasks = visible.filter((t) => t.assigneeId !== null && t.dueLabel !== 'Hoy');
+  const openTasks = visible.filter((t) => t.assignee_id === null);
+  const todayTasks = visible.filter((t) => t.assignee_id !== null && taskDueLabel(t) === 'Hoy');
+  const weekTasks = visible.filter((t) => t.assignee_id !== null && taskDueLabel(t) !== 'Hoy');
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top']}>
@@ -56,10 +61,10 @@ export default function TareasScreen() {
         contentContainerStyle={styles.chipsRow}
         style={styles.chipsScroll}>
         <Chip label="Todas" selected={activeCategory === null} onPress={() => setActiveCategory(null)} />
-        {CATEGORIES.map((c) => (
+        {categories.map((c) => (
           <Chip
             key={c.id}
-            label={c.label}
+            label={c.name}
             selected={activeCategory === c.id}
             activeColor={c.color}
             onPress={() => setActiveCategory(c.id)}
@@ -70,22 +75,33 @@ export default function TareasScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.center}>
+          {tasks.length === 0 && (
+            <Text style={{ color: theme.textFaint, fontFamily: Fonts.body, fontSize: 13, textAlign: 'center', marginTop: Spacing.six }}>
+              Aún no hay tareas. Crea la primera con el botón +.
+            </Text>
+          )}
+
           {openTasks.length > 0 && (
             <TaskSection title="Abiertas para el grupo">
               {openTasks.map((task) => {
-                const category = getCategory(task.categoryId);
+                const category = categories.find((c) => c.id === task.category_id);
+                const style = categoryStyle(category ?? { icon: 'pin', color: theme.textFaint });
                 return (
-                  <Card key={task.id} style={styles.taskRow} padding={12} outlined outlineColor={category.color}>
-                    <CategoryIcon categoryId={task.categoryId} />
+                  <Card key={task.id} style={styles.taskRow} padding={12} outlined outlineColor={style.color}>
+                    <IconCircle size={40} background={style.soft}>
+                      <style.Icon size={19} color={style.color} />
+                    </IconCircle>
                     <View style={styles.flexGrow}>
                       <Text style={[styles.taskTitle, { color: theme.text, fontFamily: Fonts.bodyMedium }]}>
                         {task.title}
                       </Text>
-                      <Text style={{ color: category.color, fontFamily: Fonts.bodyMedium, fontSize: 11.5 }}>
+                      <Text style={{ color: style.color, fontFamily: Fonts.bodyMedium, fontSize: 11.5 }}>
                         Disponible · nadie la ha tomado
                       </Text>
                     </View>
-                    <Pressable style={[styles.takeBtn, { backgroundColor: category.color }]}>
+                    <Pressable
+                      onPress={() => claimTask(task)}
+                      style={[styles.takeBtn, { backgroundColor: style.color }]}>
                       <Text style={{ color: '#fff', fontFamily: Fonts.bodyBold, fontSize: 11.5 }}>Tomar</Text>
                     </Pressable>
                   </Card>
@@ -97,7 +113,7 @@ export default function TareasScreen() {
           {todayTasks.length > 0 && (
             <TaskSection title="Hoy">
               {todayTasks.map((task) => (
-                <TaskRow key={task.id} task={task} />
+                <TaskListRow key={task.id} task={task} assigneeName={displayName(findMember(task.assignee_id)?.name)} onToggle={() => toggleTask(task)} />
               ))}
             </TaskSection>
           )}
@@ -105,7 +121,7 @@ export default function TareasScreen() {
           {weekTasks.length > 0 && (
             <TaskSection title="Esta semana">
               {weekTasks.map((task) => (
-                <TaskRow key={task.id} task={task} />
+                <TaskListRow key={task.id} task={task} assigneeName={displayName(findMember(task.assignee_id)?.name)} onToggle={() => toggleTask(task)} />
               ))}
             </TaskSection>
           )}
@@ -113,6 +129,10 @@ export default function TareasScreen() {
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+function displayName(name?: string) {
+  return name ?? '';
 }
 
 function TaskSection({ title, children }: { title: string; children: React.ReactNode }) {
@@ -127,15 +147,18 @@ function TaskSection({ title, children }: { title: string; children: React.React
   );
 }
 
-function TaskRow({ task }: { task: Task }) {
+function TaskListRow({ task, assigneeName, onToggle }: { task: TaskRow; assigneeName: string; onToggle: () => void }) {
   const theme = useTheme();
-  const category = getCategory(task.categoryId);
-  const assignee = findMember(task.assigneeId);
-  const done = task.status === 'hecha';
+  const { categories } = useAppData();
+  const category = categories.find((c) => c.id === task.category_id);
+  const style = categoryStyle(category ?? { icon: 'pin', color: theme.textFaint });
+  const done = task.status === 'done';
 
   return (
     <Card style={styles.taskRow} padding={12}>
-      <CategoryIcon categoryId={task.categoryId} />
+      <IconCircle size={40} background={style.soft}>
+        <style.Icon size={19} color={style.color} />
+      </IconCircle>
       <View style={styles.flexGrow}>
         <Text
           style={[
@@ -150,15 +173,17 @@ function TaskRow({ task }: { task: Task }) {
         </Text>
         <View style={styles.subtitleRow}>
           <Text style={{ color: done ? theme.textFaint : theme.textSecondary, fontFamily: Fonts.body, fontSize: 11.5 }}>
-            {category.label} ·
+            {category?.name ?? 'Sin categoría'} ·
           </Text>
-          {task.frequency !== 'una_vez' && <RepeatIcon size={11} color={theme.textFaint} strokeWidth={2} />}
+          {task.recurrence !== 'none' && <RepeatIcon size={11} color={theme.textFaint} strokeWidth={2} />}
           <Text style={{ color: done ? theme.textFaint : theme.textSecondary, fontFamily: Fonts.body, fontSize: 11.5 }}>
-            {task.frequency === 'una_vez' ? 'una vez' : FREQUENCY_LABEL[task.frequency]} · {assignee?.name}
+            {FREQUENCY_LABEL[task.recurrence]} · {assigneeName}
           </Text>
         </View>
       </View>
-      <StatusCheck done={done} />
+      <Pressable onPress={onToggle}>
+        <StatusCheck done={done} />
+      </Pressable>
     </Card>
   );
 }

@@ -1,25 +1,30 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { getCategory } from '@/components/CategoryIcon';
 import { SlidersIcon, TrophyIcon } from '@/components/icons';
 import { Avatar } from '@/components/ui/Avatar';
 import { Card } from '@/components/ui/Card';
-import { IconCircle } from '@/components/ui/IconCircle';
 import { Fonts, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
-import { ACHIEVEMENTS, GROUPS, MEMBERS } from '@/data/mock';
+import { useAppData } from '@/hooks/use-app-data';
 import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
 import { isSupabaseConfigured } from '@/lib/supabase';
 
-const activeGroup = GROUPS.find((g) => g.active)!;
-const ranked = [...MEMBERS].sort((a, b) => b.points - a.points);
-const you = MEMBERS.find((m) => m.isYou)!;
-const pointsToNextLevel = 400;
+/** 100 points per level — not modeled server-side, just a simple, consistent display rule. */
+const POINTS_PER_LEVEL = 100;
+function levelFor(points: number) {
+  return Math.floor(points / POINTS_PER_LEVEL) + 1;
+}
 
 export default function GrupoScreen() {
   const theme = useTheme();
-  const { signOut } = useAuth();
+  const { session, signOut } = useAuth();
+  const { activeGroup, members } = useAppData();
+
+  const ranked = [...members].sort((a, b) => b.points - a.points);
+  const you = members.find((m) => m.id === session?.user?.id) ?? members[0];
+  const youLevel = levelFor(you?.points ?? 0);
+  const nextLevelPoints = youLevel * POINTS_PER_LEVEL;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top']}>
@@ -28,10 +33,10 @@ export default function GrupoScreen() {
           <View style={styles.headerRow}>
             <View>
               <Text style={[styles.title, { color: theme.text, fontFamily: Fonts.display }]}>
-                {activeGroup.name}
+                {activeGroup?.name ?? 'Sin grupo'}
               </Text>
               <Text style={{ color: theme.textSecondary, fontFamily: Fonts.body, fontSize: 12.5 }}>
-                {activeGroup.memberCount} integrantes
+                {members.length} {members.length === 1 ? 'integrante' : 'integrantes'}
               </Text>
             </View>
             <View style={[styles.iconBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -40,92 +45,86 @@ export default function GrupoScreen() {
           </View>
 
           {/* Leaderboard */}
-          <Section title="Ranking del mes">
-            <Card style={[styles.leaderRow, { backgroundColor: theme.primarySoft }]} padding={13}>
-              <Text style={[styles.rankIndex, { color: theme.primary, fontFamily: Fonts.display }]}>1</Text>
-              <Avatar initials={ranked[0].initials} color={ranked[0].avatarColor} size={44} />
-              <View style={styles.flexGrow}>
-                <Text style={{ color: theme.text, fontFamily: Fonts.bodyBold, fontSize: 14.5 }}>
-                  {ranked[0].isYou ? 'Tú' : ranked[0].name}
-                </Text>
-                <Text style={{ color: theme.textSecondary, fontFamily: Fonts.body, fontSize: 11 }}>
-                  Nivel {ranked[0].level} · líder del mes
-                </Text>
-              </View>
-              <TrophyIcon size={16} color={getCategory('cocina').color} />
-              <Text style={[styles.rankPoints, { color: theme.text, fontFamily: Fonts.display, fontSize: 14.5 }]}>
-                {ranked[0].points} pts
-              </Text>
-            </Card>
-
-            <Card padding={0} style={{ paddingHorizontal: Spacing.four }}>
-              {ranked.slice(1).map((member, i) => (
-                <View
-                  key={member.id}
-                  style={[
-                    styles.simpleRow,
-                    i < ranked.length - 2 && { borderBottomWidth: 1, borderBottomColor: theme.border },
-                  ]}>
-                  <Text style={[styles.rankIndexSmall, { color: theme.textFaint, fontFamily: Fonts.display }]}>
-                    {i + 2}
+          {ranked.length > 0 && (
+            <Section title="Ranking">
+              <Card style={[styles.leaderRow, { backgroundColor: theme.primarySoft }]} padding={13}>
+                <Text style={[styles.rankIndex, { color: theme.primary, fontFamily: Fonts.display }]}>1</Text>
+                <Avatar initials={ranked[0].initials} color={ranked[0].avatar_color} size={44} />
+                <View style={styles.flexGrow}>
+                  <Text style={{ color: theme.text, fontFamily: Fonts.bodyBold, fontSize: 14.5 }}>
+                    {ranked[0].id === session?.user?.id ? 'Tú' : ranked[0].name}
                   </Text>
-                  <Avatar initials={member.initials} color={member.avatarColor} size={36} />
-                  <Text style={[styles.flexGrow, { color: theme.text, fontFamily: Fonts.bodyMedium, fontSize: 13.5 }]}>
-                    {member.isYou ? 'Tú' : member.name}
-                  </Text>
-                  <Text style={{ color: theme.text, fontFamily: Fonts.bodyBold, fontSize: 13 }}>
-                    {member.points} pts
+                  <Text style={{ color: theme.textSecondary, fontFamily: Fonts.body, fontSize: 11 }}>
+                    Nivel {levelFor(ranked[0].points)} · líder
                   </Text>
                 </View>
-              ))}
-            </Card>
-          </Section>
+                <TrophyIcon size={16} color={theme.primary} />
+                <Text style={[styles.rankPoints, { color: theme.text, fontFamily: Fonts.display, fontSize: 14.5 }]}>
+                  {ranked[0].points} pts
+                </Text>
+              </Card>
 
-          {/* Achievements */}
-          <Section title="Logros">
-            <View style={styles.achievementsGrid}>
-              {ACHIEVEMENTS.map((a) => (
-                <Card
-                  key={a.id}
-                  style={[styles.achievementCard, !a.unlocked && { opacity: 0.45 }]}
-                  padding={12}>
-                  <IconCircle size={42} background={a.unlocked ? theme.primarySoft : theme.surfaceAlt}>
-                    <TrophyIcon size={19} color={a.unlocked ? theme.primary : theme.textFaint} />
-                  </IconCircle>
-                  <Text
-                    style={{ color: theme.text, fontFamily: Fonts.bodyMedium, fontSize: 10.5, textAlign: 'center' }}
-                    numberOfLines={2}>
-                    {a.label}
-                  </Text>
+              {ranked.length > 1 && (
+                <Card padding={0} style={{ paddingHorizontal: Spacing.four }}>
+                  {ranked.slice(1).map((member, i) => (
+                    <View
+                      key={member.id}
+                      style={[
+                        styles.simpleRow,
+                        i < ranked.length - 2 && { borderBottomWidth: 1, borderBottomColor: theme.border },
+                      ]}>
+                      <Text style={[styles.rankIndexSmall, { color: theme.textFaint, fontFamily: Fonts.display }]}>
+                        {i + 2}
+                      </Text>
+                      <Avatar initials={member.initials} color={member.avatar_color} size={36} />
+                      <Text style={[styles.flexGrow, { color: theme.text, fontFamily: Fonts.bodyMedium, fontSize: 13.5 }]}>
+                        {member.id === session?.user?.id ? 'Tú' : member.name}
+                      </Text>
+                      <Text style={{ color: theme.text, fontFamily: Fonts.bodyBold, fontSize: 13 }}>
+                        {member.points} pts
+                      </Text>
+                    </View>
+                  ))}
                 </Card>
-              ))}
-            </View>
+              )}
+            </Section>
+          )}
+
+          {/* Achievements — catalog isn't seeded yet (supabase/schema.sql's `achievements` table), so nothing to unlock yet. */}
+          <Section title="Logros">
+            <Card padding={16}>
+              <Text style={{ color: theme.textFaint, fontFamily: Fonts.body, fontSize: 12.5, textAlign: 'center' }}>
+                Todavía no hay logros configurados para este grupo.
+              </Text>
+            </Card>
           </Section>
 
           {/* Your progress */}
-          <Section title="Tu progreso">
-            <Card padding={15} style={{ gap: Spacing.two }}>
-              <View style={styles.progressHeaderRow}>
-                <Text style={{ color: theme.text, fontFamily: Fonts.bodyBold, fontSize: 13.5 }}>
-                  Nivel {you.level}
+          {you && (
+            <Section title="Tu progreso">
+              <Card padding={15} style={{ gap: Spacing.two }}>
+                <View style={styles.progressHeaderRow}>
+                  <Text style={{ color: theme.text, fontFamily: Fonts.bodyBold, fontSize: 13.5 }}>
+                    Nivel {youLevel}
+                  </Text>
+                  <Text style={{ color: theme.textSecondary, fontFamily: Fonts.body, fontSize: 12 }}>
+                    {you.points} / {nextLevelPoints} pts
+                  </Text>
+                </View>
+                <View style={[styles.barTrack, { backgroundColor: theme.surfaceAlt }]}>
+                  <View
+                    style={[
+                      styles.barFill,
+                      { backgroundColor: theme.primary, width: `${Math.min(100, (you.points / nextLevelPoints) * 100)}%` },
+                    ]}
+                  />
+                </View>
+                <Text style={{ color: theme.textFaint, fontFamily: Fonts.body, fontSize: 11.5 }}>
+                  {Math.max(0, nextLevelPoints - you.points)} pts para el nivel {youLevel + 1}
                 </Text>
-                <Text style={{ color: theme.textSecondary, fontFamily: Fonts.body, fontSize: 12 }}>
-                  {you.points} / {pointsToNextLevel} pts
-                </Text>
-              </View>
-              <View style={[styles.barTrack, { backgroundColor: theme.surfaceAlt }]}>
-                <View
-                  style={[
-                    styles.barFill,
-                    { backgroundColor: theme.primary, width: `${Math.min(100, (you.points / pointsToNextLevel) * 100)}%` },
-                  ]}
-                />
-              </View>
-              <Text style={{ color: theme.textFaint, fontFamily: Fonts.body, fontSize: 11.5 }}>
-                {pointsToNextLevel - you.points} pts para el nivel {you.level + 1}
-              </Text>
-            </Card>
-          </Section>
+              </Card>
+            </Section>
+          )}
 
           {isSupabaseConfigured && (
             <Pressable style={styles.signOut} onPress={() => signOut()}>
@@ -174,8 +173,6 @@ const styles = StyleSheet.create({
   rankIndexSmall: { width: 18, fontSize: 13 },
   rankPoints: { width: 54, textAlign: 'right' },
   simpleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, paddingVertical: 10 },
-  achievementsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
-  achievementCard: { width: '31.5%', alignItems: 'center', gap: 6 },
   progressHeaderRow: { flexDirection: 'row', justifyContent: 'space-between' },
   barTrack: { height: 9, borderRadius: Radii.pill, overflow: 'hidden' },
   barFill: { height: '100%', borderRadius: Radii.pill },

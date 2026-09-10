@@ -2,25 +2,31 @@ import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { categoryStyle } from '@/components/category-style';
 import { BellIcon, ChevronDownIcon, HomeIcon, PlusIcon, StarIcon, TrophyIcon } from '@/components/icons';
-import { getCategory } from '@/components/CategoryIcon';
-import { CATEGORY_ICONS } from '@/components/icons';
 import { Avatar } from '@/components/ui/Avatar';
 import { Card } from '@/components/ui/Card';
 import { IconCircle } from '@/components/ui/IconCircle';
 import { ProgressRing } from '@/components/ui/ProgressRing';
 import { StatusCheck } from '@/components/ui/StatusCheck';
 import { Fonts, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
-import { findMember, GROUPS, MEMBERS, TASKS } from '@/data/mock';
+import { useAppData } from '@/hooks/use-app-data';
+import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
-
-const activeGroup = GROUPS.find((g) => g.active)!;
-const todayTasks = TASKS.filter((t) => t.dueLabel === 'Hoy');
-const topMembers = [...MEMBERS].sort((a, b) => b.points - a.points).slice(0, 2);
-const you = MEMBERS.find((m) => m.isYou)!;
+import { taskDueLabel } from '@/lib/task-due-label';
 
 export default function InicioScreen() {
   const theme = useTheme();
+  const { session } = useAuth();
+  const { activeGroup, members, categories, tasks, toggleTask } = useAppData();
+
+  const you = members.find((m) => m.id === session?.user?.id) ?? members[0];
+  const todayTasks = tasks.filter((t) => taskDueLabel(t) === 'Hoy');
+  const todayAssigned = todayTasks.filter((t) => t.assignee_id);
+  const doneToday = todayAssigned.filter((t) => t.status === 'done').length;
+  const progress = todayAssigned.length > 0 ? doneToday / todayAssigned.length : 0;
+  const doneCount = tasks.filter((t) => t.status === 'done').length;
+  const topMembers = [...members].sort((a, b) => b.points - a.points).slice(0, 2);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top']}>
@@ -32,7 +38,9 @@ export default function InicioScreen() {
               <Text style={[styles.hello, { color: theme.textSecondary, fontFamily: Fonts.body }]}>
                 Hola de nuevo
               </Text>
-              <Text style={[styles.name, { color: theme.text, fontFamily: Fonts.display }]}>{you.name}</Text>
+              <Text style={[styles.name, { color: theme.text, fontFamily: Fonts.display }]}>
+                {you?.name ?? '...'}
+              </Text>
             </View>
             <Pressable
               onPress={() => router.push('/notificaciones')}
@@ -50,7 +58,7 @@ export default function InicioScreen() {
               <HomeIcon size={12} color={theme.primary} strokeWidth={2.2} />
             </IconCircle>
             <Text style={[styles.groupLabel, { color: theme.text, fontFamily: Fonts.bodyBold }]}>
-              {activeGroup.name}
+              {activeGroup?.name ?? 'Sin grupo'}
             </Text>
             <ChevronDownIcon size={12} color={theme.textFaint} strokeWidth={2.2} />
           </Pressable>
@@ -61,49 +69,55 @@ export default function InicioScreen() {
               <Text style={[styles.smallLabel, { color: theme.textSecondary, fontFamily: Fonts.body }]}>
                 Progreso de hoy
               </Text>
-              <Text style={[styles.bigStat, { color: theme.text, fontFamily: Fonts.display }]}>2 de 4</Text>
+              <Text style={[styles.bigStat, { color: theme.text, fontFamily: Fonts.display }]}>
+                {doneToday} de {todayAssigned.length}
+              </Text>
               <Text style={[styles.faintLabel, { color: theme.textFaint, fontFamily: Fonts.body }]}>
                 tareas completadas
               </Text>
             </View>
-            <ProgressRing size={60} progress={0.5} trackColor={theme.border} progressColor={theme.primary} />
+            <ProgressRing size={60} progress={progress} trackColor={theme.border} progressColor={theme.primary} />
           </Card>
 
           {/* Tareas de hoy */}
           <Section title="Tareas de hoy" actionLabel="Ver todas" onAction={() => router.push('/tareas')}>
-            {todayTasks
-              .filter((t) => t.assigneeId)
-              .slice(0, 2)
-              .map((task) => {
-                const category = getCategory(task.categoryId);
-                const Icon = CATEGORY_ICONS[category.icon];
-                const assignee = findMember(task.assigneeId);
-                return (
-                  <Card key={task.id} style={styles.taskRow} padding={12}>
-                    <IconCircle size={38} background={category.soft}>
-                      <Icon size={18} color={category.color} />
-                    </IconCircle>
-                    <View style={styles.flexGrow}>
-                      <Text
-                        style={[
-                          styles.taskTitle,
-                          {
-                            color: theme.text,
-                            fontFamily: Fonts.bodyMedium,
-                            textDecorationLine: task.status === 'hecha' ? 'line-through' : 'none',
-                            opacity: task.status === 'hecha' ? 0.55 : 1,
-                          },
-                        ]}>
-                        {task.title}
-                      </Text>
-                      <Text style={[styles.taskSubtitle, { color: theme.textSecondary, fontFamily: Fonts.body }]}>
-                        {category.label} · {assignee?.name}
-                      </Text>
-                    </View>
-                    <StatusCheck done={task.status === 'hecha'} />
-                  </Card>
-                );
-              })}
+            {todayAssigned.length === 0 && (
+              <Text style={{ color: theme.textFaint, fontFamily: Fonts.body, fontSize: 12.5 }}>
+                No hay tareas asignadas para hoy.
+              </Text>
+            )}
+            {todayAssigned.slice(0, 2).map((task) => {
+              const category = categories.find((c) => c.id === task.category_id);
+              const style = categoryStyle(category ?? { icon: 'pin', color: theme.textFaint });
+              const assignee = members.find((m) => m.id === task.assignee_id);
+              return (
+                <Card key={task.id} style={styles.taskRow} padding={12}>
+                  <IconCircle size={38} background={style.soft}>
+                    <style.Icon size={18} color={style.color} />
+                  </IconCircle>
+                  <View style={styles.flexGrow}>
+                    <Text
+                      style={[
+                        styles.taskTitle,
+                        {
+                          color: theme.text,
+                          fontFamily: Fonts.bodyMedium,
+                          textDecorationLine: task.status === 'done' ? 'line-through' : 'none',
+                          opacity: task.status === 'done' ? 0.55 : 1,
+                        },
+                      ]}>
+                      {task.title}
+                    </Text>
+                    <Text style={[styles.taskSubtitle, { color: theme.textSecondary, fontFamily: Fonts.body }]}>
+                      {category?.name ?? 'Sin categoría'} · {assignee?.name}
+                    </Text>
+                  </View>
+                  <Pressable onPress={() => toggleTask(task)}>
+                    <StatusCheck done={task.status === 'done'} />
+                  </Pressable>
+                </Card>
+              );
+            })}
           </Section>
 
           {/* Tu semana */}
@@ -114,22 +128,22 @@ export default function InicioScreen() {
                   <StarIcon size={17} color={theme.primary} />
                 </IconCircle>
                 <View>
-                  <Text style={[styles.statValue, { color: theme.text, fontFamily: Fonts.display }]}>5 días</Text>
+                  <Text style={[styles.statValue, { color: theme.text, fontFamily: Fonts.display }]}>{doneCount}</Text>
                   <Text style={[styles.statCaption, { color: theme.textFaint, fontFamily: Fonts.body }]}>
-                    de racha
+                    tareas hechas
                   </Text>
                 </View>
               </Card>
               <Card style={styles.statCard} padding={13}>
-                <IconCircle size={34} background={getCategory('cocina').soft}>
-                  <StarIcon size={17} color={getCategory('cocina').color} />
+                <IconCircle size={34} background={theme.primarySoft}>
+                  <StarIcon size={17} color={theme.primary} />
                 </IconCircle>
                 <View>
                   <Text style={[styles.statValue, { color: theme.text, fontFamily: Fonts.display }]}>
-                    {you.points} pts
+                    {you?.points ?? 0} pts
                   </Text>
                   <Text style={[styles.statCaption, { color: theme.textFaint, fontFamily: Fonts.body }]}>
-                    esta semana
+                    en el grupo
                   </Text>
                 </View>
               </Card>
@@ -138,28 +152,34 @@ export default function InicioScreen() {
 
           {/* Ranking familiar */}
           <Section title="Ranking familiar" actionLabel="Ver todo" onAction={() => router.push('/grupo')}>
-            <Card padding={0} style={{ paddingHorizontal: Spacing.four }}>
-              {topMembers.map((member, i) => (
-                <View
-                  key={member.id}
-                  style={[
-                    styles.rankRow,
-                    i < topMembers.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border },
-                  ]}>
-                  <Text style={[styles.rankIndex, { color: theme.textFaint, fontFamily: Fonts.display }]}>
-                    {i + 1}
-                  </Text>
-                  <Avatar initials={member.initials} color={member.avatarColor} size={28} />
-                  <Text style={[styles.rankName, { color: theme.text, fontFamily: Fonts.bodyMedium }]}>
-                    {member.isYou ? 'Tú' : member.name}
-                  </Text>
-                  {i === 0 && <TrophyIcon size={15} color={getCategory('cocina').color} />}
-                  <Text style={[styles.rankPoints, { color: theme.text, fontFamily: Fonts.bodyBold }]}>
-                    {member.points} pts
-                  </Text>
-                </View>
-              ))}
-            </Card>
+            {topMembers.length === 0 ? (
+              <Text style={{ color: theme.textFaint, fontFamily: Fonts.body, fontSize: 12.5 }}>
+                Todavía no hay nadie más en el grupo.
+              </Text>
+            ) : (
+              <Card padding={0} style={{ paddingHorizontal: Spacing.four }}>
+                {topMembers.map((member, i) => (
+                  <View
+                    key={member.id}
+                    style={[
+                      styles.rankRow,
+                      i < topMembers.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border },
+                    ]}>
+                    <Text style={[styles.rankIndex, { color: theme.textFaint, fontFamily: Fonts.display }]}>
+                      {i + 1}
+                    </Text>
+                    <Avatar initials={member.initials} color={member.avatar_color} size={28} />
+                    <Text style={[styles.rankName, { color: theme.text, fontFamily: Fonts.bodyMedium }]}>
+                      {member.id === session?.user?.id ? 'Tú' : member.name}
+                    </Text>
+                    {i === 0 && <TrophyIcon size={15} color={theme.primary} />}
+                    <Text style={[styles.rankPoints, { color: theme.text, fontFamily: Fonts.bodyBold }]}>
+                      {member.points} pts
+                    </Text>
+                  </View>
+                ))}
+              </Card>
+            )}
           </Section>
 
           {/* Quick actions */}

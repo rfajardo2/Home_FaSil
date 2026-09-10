@@ -2,14 +2,15 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { CATEGORY_ICONS, ChevronRightIcon, GiftIcon, HeartIcon, PawIcon, PinIcon } from '@/components/icons';
+import { categoryStyle } from '@/components/category-style';
+import { ChevronRightIcon } from '@/components/icons';
 import { Card } from '@/components/ui/Card';
 import { Header } from '@/components/ui/Header';
 import { IconCircle } from '@/components/ui/IconCircle';
-import { AccentColors, CATEGORIES, Fonts, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
+import { AccentColors, Fonts, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
+import { useAppData } from '@/hooks/use-app-data';
 import { useTheme } from '@/hooks/use-theme';
 
-const TASK_COUNTS: Record<string, number> = { cocina: 8, limpieza: 6, servicios: 4, mantenimiento: 3, eventos: 2 };
 const NEW_CATEGORY_COLORS = [
   AccentColors.petGreen,
   AccentColors.catCocina,
@@ -18,43 +19,71 @@ const NEW_CATEGORY_COLORS = [
   AccentColors.catMantenimiento,
   AccentColors.catEventos,
 ];
-const NEW_CATEGORY_ICONS = [PawIcon, HeartIcon, PinIcon, GiftIcon];
+/** Icon keys must match CATEGORY_ICONS in @/components/icons. */
+const NEW_CATEGORY_ICONS = ['paw', 'heart', 'pin', 'gift'];
 
 export default function CategoriasScreen() {
   const theme = useTheme();
+  const { categories, tasks, createCategory } = useAppData();
   const [name, setName] = useState('');
   const [colorIndex, setColorIndex] = useState(0);
   const [iconIndex, setIconIndex] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  const taskCountByCategory = tasks.reduce<Record<string, number>>((acc, t) => {
+    if (t.category_id) acc[t.category_id] = (acc[t.category_id] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  async function handleCreate() {
+    if (creating) return;
+    setError(null);
+    if (!name.trim()) {
+      setError('Ponle un nombre a la categoría.');
+      return;
+    }
+    setCreating(true);
+    const { error: createError } = await createCategory(name.trim(), NEW_CATEGORY_ICONS[iconIndex], NEW_CATEGORY_COLORS[colorIndex]);
+    setCreating(false);
+    if (createError) {
+      setError(createError);
+      return;
+    }
+    setName('');
+  }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top', 'bottom']}>
       <Header title="Categorías" showBack size="md" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.center}>
-          <Card padding={0} style={{ paddingHorizontal: Spacing.four }}>
-            {CATEGORIES.map((c, i) => {
-              const Icon = CATEGORY_ICONS[c.icon];
-              return (
-                <View
-                  key={c.id}
-                  style={[
-                    styles.row,
-                    i < CATEGORIES.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border },
-                  ]}>
-                  <IconCircle size={32} background={c.soft}>
-                    <Icon size={15} color={c.color} />
-                  </IconCircle>
-                  <View style={styles.flexGrow}>
-                    <Text style={{ color: theme.text, fontFamily: Fonts.bodyMedium, fontSize: 13.5 }}>{c.label}</Text>
-                    <Text style={{ color: theme.textFaint, fontFamily: Fonts.body, fontSize: 11 }}>
-                      {TASK_COUNTS[c.id] ?? 0} tareas
-                    </Text>
+          {categories.length > 0 && (
+            <Card padding={0} style={{ paddingHorizontal: Spacing.four }}>
+              {categories.map((c, i) => {
+                const style = categoryStyle(c);
+                return (
+                  <View
+                    key={c.id}
+                    style={[
+                      styles.row,
+                      i < categories.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border },
+                    ]}>
+                    <IconCircle size={32} background={style.soft}>
+                      <style.Icon size={15} color={style.color} />
+                    </IconCircle>
+                    <View style={styles.flexGrow}>
+                      <Text style={{ color: theme.text, fontFamily: Fonts.bodyMedium, fontSize: 13.5 }}>{c.name}</Text>
+                      <Text style={{ color: theme.textFaint, fontFamily: Fonts.body, fontSize: 11 }}>
+                        {taskCountByCategory[c.id] ?? 0} tareas
+                      </Text>
+                    </View>
+                    <ChevronRightIcon size={15} color={theme.textFaint} />
                   </View>
-                  <ChevronRightIcon size={15} color={theme.textFaint} />
-                </View>
-              );
-            })}
-          </Card>
+                );
+              })}
+            </Card>
+          )}
 
           <View style={styles.newCategory}>
             <Text style={[styles.sectionTitle, { color: theme.text, fontFamily: Fonts.display }]}>
@@ -89,26 +118,32 @@ export default function CategoriasScreen() {
 
             <Field label="Ícono">
               <View style={styles.swatchRow}>
-                {NEW_CATEGORY_ICONS.map((Icon, i) => (
-                  <Pressable
-                    key={i}
-                    onPress={() => setIconIndex(i)}
-                    style={[
-                      styles.iconSwatch,
-                      {
-                        backgroundColor: iconIndex === i ? NEW_CATEGORY_COLORS[colorIndex] : theme.surface,
-                        borderColor: iconIndex === i ? NEW_CATEGORY_COLORS[colorIndex] : theme.border,
-                      },
-                    ]}>
-                    <Icon size={17} color={iconIndex === i ? '#fff' : theme.textSecondary} />
-                  </Pressable>
-                ))}
+                {NEW_CATEGORY_ICONS.map((iconKey, i) => {
+                  const style = categoryStyle({ icon: iconKey, color: NEW_CATEGORY_COLORS[colorIndex] });
+                  const selected = iconIndex === i;
+                  return (
+                    <Pressable
+                      key={iconKey}
+                      onPress={() => setIconIndex(i)}
+                      style={[
+                        styles.iconSwatch,
+                        {
+                          backgroundColor: selected ? NEW_CATEGORY_COLORS[colorIndex] : theme.surface,
+                          borderColor: selected ? NEW_CATEGORY_COLORS[colorIndex] : theme.border,
+                        },
+                      ]}>
+                      <style.Icon size={17} color={selected ? '#fff' : theme.textSecondary} />
+                    </Pressable>
+                  );
+                })}
               </View>
             </Field>
 
-            <Pressable style={[styles.createBtn, { backgroundColor: theme.primary }]}>
+            {error && <Text style={{ color: theme.danger, fontFamily: Fonts.body, fontSize: 12.5 }}>{error}</Text>}
+
+            <Pressable onPress={handleCreate} style={[styles.createBtn, { backgroundColor: theme.primary }]}>
               <Text style={{ color: theme.primaryOn, fontFamily: Fonts.bodyBold, fontSize: 14 }}>
-                Crear categoría
+                {creating ? 'Creando...' : 'Crear categoría'}
               </Text>
             </Pressable>
           </View>
