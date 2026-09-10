@@ -5,6 +5,11 @@ export type ProfileRow = {
   name: string;
   avatar_color: string;
   initials: string;
+  created_at: string;
+  /** Nullable: only present for profiles created after username support was added. */
+  first_name: string | null;
+  last_name: string | null;
+  username: string | null;
 };
 
 /** A group's member profile, joined with their points within that group. */

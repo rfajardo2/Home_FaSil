@@ -1,9 +1,11 @@
+import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SlidersIcon, TrophyIcon } from '@/components/icons';
 import { Avatar } from '@/components/ui/Avatar';
 import { Card } from '@/components/ui/Card';
+import { NoGroupCard } from '@/components/ui/NoGroupCard';
 import { Fonts, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { useAppData } from '@/hooks/use-app-data';
 import { useAuth } from '@/hooks/use-auth';
@@ -39,13 +41,17 @@ export default function GrupoScreen() {
                 {members.length} {members.length === 1 ? 'integrante' : 'integrantes'}
               </Text>
             </View>
-            <View style={[styles.iconBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <Pressable
+              onPress={() => router.push('/perfil')}
+              style={[styles.iconBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <SlidersIcon size={17} color={theme.textSecondary} />
-            </View>
+            </Pressable>
           </View>
 
+          {!activeGroup && <NoGroupCard message="Crea un grupo o únete a uno para ver el ranking y los logros del hogar." />}
+
           {/* Leaderboard */}
-          {ranked.length > 0 && (
+          {activeGroup && ranked.length > 0 && (
             <Section title="Ranking">
               <Card style={[styles.leaderRow, { backgroundColor: theme.primarySoft }]} padding={13}>
                 <Text style={[styles.rankIndex, { color: theme.primary, fontFamily: Fonts.display }]}>1</Text>
@@ -91,16 +97,18 @@ export default function GrupoScreen() {
           )}
 
           {/* Achievements — catalog isn't seeded yet (supabase/schema.sql's `achievements` table), so nothing to unlock yet. */}
-          <Section title="Logros">
-            <Card padding={16}>
-              <Text style={{ color: theme.textFaint, fontFamily: Fonts.body, fontSize: 12.5, textAlign: 'center' }}>
-                Todavía no hay logros configurados para este grupo.
-              </Text>
-            </Card>
-          </Section>
+          {activeGroup && (
+            <Section title="Logros">
+              <Card padding={16}>
+                <Text style={{ color: theme.textFaint, fontFamily: Fonts.body, fontSize: 12.5, textAlign: 'center' }}>
+                  Todavía no hay logros configurados para este grupo.
+                </Text>
+              </Card>
+            </Section>
+          )}
 
           {/* Your progress */}
-          {you && (
+          {activeGroup && you && (
             <Section title="Tu progreso">
               <Card padding={15} style={{ gap: Spacing.two }}>
                 <View style={styles.progressHeaderRow}>

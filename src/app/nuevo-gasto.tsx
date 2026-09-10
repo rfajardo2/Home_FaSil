@@ -80,7 +80,7 @@ export default function NuevoGastoScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top', 'bottom']}>
-      <Header title="Nuevo gasto" showBack size="md" />
+      <Header title="Nuevo gasto" showBack fallbackHref="/gastos" size="md" />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.center}>

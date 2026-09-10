@@ -100,6 +100,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function traducirError(message: string): string {
   if (message.includes('Invalid login credentials')) return 'Correo o contraseña incorrectos.';
   if (message.includes('Email not confirmed')) return 'Confirma tu correo antes de iniciar sesión.';
+  if (message.includes('rate limit')) return 'Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo.';
   return message;
 }
 

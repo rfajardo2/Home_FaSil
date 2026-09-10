@@ -10,6 +10,7 @@ import type {
   GroupMembership,
   MemberRow,
   NotificationRow,
+  ProfileRow,
   SharedAccountRow,
   TaskRow,
 } from '@/lib/database-types';
@@ -38,7 +39,16 @@ const MOCK_MEMBERS: MemberRow[] = MEMBERS.map((m) => ({
   initials: m.initials,
   avatar_color: m.avatarColor,
   points: m.points,
+  created_at: new Date().toISOString(),
+  first_name: m.name.split(' ')[0] ?? m.name,
+  last_name: null,
+  username: m.name.toLowerCase().replace(/\s+/g, ''),
 }));
+
+const MOCK_MY_PROFILE: ProfileRow = (() => {
+  const { points: _points, ...profile } = MOCK_MEMBERS.find((m) => m.id === MEMBERS.find((mm) => mm.isYou)?.id) ?? MOCK_MEMBERS[0];
+  return profile;
+})();
 
 const MOCK_CATEGORIES: CategoryRow[] = CATEGORIES.map((c) => ({
   id: c.id,
@@ -153,6 +163,9 @@ type AppDataContextValue = {
   activeGroup: GroupMembership | null;
   setActiveGroupId: (id: string) => void;
   members: MemberRow[];
+  /** The signed-in user's own profile — available even when they belong to no group. */
+  myProfile: ProfileRow | null;
+  refreshMyProfile: () => Promise<void>;
   categories: CategoryRow[];
   tasks: TaskRow[];
   sharedAccounts: SharedAccountRow[];
@@ -189,6 +202,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [sharedAccounts, setSharedAccounts] = useState<SharedAccountRow[]>(isSupabaseConfigured ? [] : MOCK_SHARED_ACCOUNTS);
   const [expenses, setExpenses] = useState<ExpenseRow[]>(isSupabaseConfigured ? [] : MOCK_EXPENSES);
   const [notifications, setNotifications] = useState<NotificationRow[]>(isSupabaseConfigured ? [] : MOCK_NOTIFICATIONS);
+  // Your own profile, independent of any group — belonging to a group is optional.
+  const [myProfile, setMyProfile] = useState<ProfileRow | null>(isSupabaseConfigured ? null : MOCK_MY_PROFILE);
 
   const activeGroupStorageKey = (forUserId: string) => `home-hub:active-group:${forUserId}`;
 
@@ -246,6 +261,16 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     setNotifications((data as NotificationRow[]) ?? []);
   }, [userId]);
 
+  const loadMyProfile = useCallback(async () => {
+    if (!isSupabaseConfigured || !userId) return;
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+    if (error) {
+      console.warn('[app-data] no se pudo cargar tu perfil:', error.message);
+      return;
+    }
+    setMyProfile((data as ProfileRow) ?? null);
+  }, [userId]);
+
   const loadGroupContent = useCallback(async (groupId: string) => {
     if (!isSupabaseConfigured) return;
     setContentLoading(true);
@@ -288,11 +313,13 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       setSharedAccounts([]);
       setExpenses([]);
       setNotifications([]);
+      setMyProfile(null);
       return;
     }
     loadGroups();
     loadNotifications();
-  }, [userId, loadGroups, loadNotifications]);
+    loadMyProfile();
+  }, [userId, loadGroups, loadNotifications, loadMyProfile]);
 
   useEffect(() => {
     if (!isSupabaseConfigured || !activeGroupId) return;
@@ -509,6 +536,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       persistActiveGroupId(id);
     },
     members,
+    myProfile,
+    refreshMyProfile: loadMyProfile,
     categories,
     tasks,
     sharedAccounts,

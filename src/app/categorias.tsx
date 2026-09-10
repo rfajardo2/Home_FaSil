@@ -8,6 +8,7 @@ import { ChevronRightIcon } from '@/components/icons';
 import { Card } from '@/components/ui/Card';
 import { Header } from '@/components/ui/Header';
 import { IconCircle } from '@/components/ui/IconCircle';
+import { NoGroupCard } from '@/components/ui/NoGroupCard';
 import { AccentColors, Fonts, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { useAppData } from '@/hooks/use-app-data';
 import { useTheme } from '@/hooks/use-theme';
@@ -25,7 +26,7 @@ const NEW_CATEGORY_ICONS = ['paw', 'heart', 'pin', 'gift'];
 
 export default function CategoriasScreen() {
   const theme = useTheme();
-  const { categories, tasks, createCategory } = useAppData();
+  const { activeGroup, categories, tasks, createCategory } = useAppData();
   const [name, setName] = useState('');
   const [colorIndex, setColorIndex] = useState(0);
   const [iconIndex, setIconIndex] = useState(0);
@@ -56,7 +57,12 @@ export default function CategoriasScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top', 'bottom']}>
-      <Header title="Categorías" showBack size="md" />
+      <Header title="Categorías" showBack fallbackHref="/" size="md" />
+      {!activeGroup ? (
+        <View style={styles.center}>
+          <NoGroupCard message="Crea un grupo o únete a uno para ver y crear categorías." />
+        </View>
+      ) : (
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.center}>
           {categories.length > 0 && (
@@ -151,6 +157,7 @@ export default function CategoriasScreen() {
           </View>
         </View>
       </ScrollView>
+      )}
     </SafeAreaView>
   );
 }

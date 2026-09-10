@@ -6,6 +6,7 @@ import { PlusIcon, ReceiptIcon, TrendingUpIcon, WalletIcon } from '@/components/
 import { Avatar } from '@/components/ui/Avatar';
 import { Card } from '@/components/ui/Card';
 import { IconCircle } from '@/components/ui/IconCircle';
+import { NoGroupCard } from '@/components/ui/NoGroupCard';
 import { Fonts, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { useAppData } from '@/hooks/use-app-data';
 import { useAuth } from '@/hooks/use-auth';
@@ -15,7 +16,7 @@ import { formatMoney } from '@/lib/format-money';
 export default function GastosScreen() {
   const theme = useTheme();
   const { session } = useAuth();
-  const { members, sharedAccounts, expenses } = useAppData();
+  const { activeGroup, members, sharedAccounts, expenses } = useAppData();
   const userId = session?.user?.id;
 
   let owedToYou = 0;
@@ -43,14 +44,20 @@ export default function GastosScreen() {
                 style={[styles.iconBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 <TrendingUpIcon size={16} color={theme.textSecondary} strokeWidth={1.9} />
               </Pressable>
-              <Pressable
-                onPress={() => router.push('/nuevo-gasto')}
-                style={[styles.iconBtn, { backgroundColor: theme.primary }]}>
-                <PlusIcon size={17} color={theme.primaryOn} strokeWidth={2.2} />
-              </Pressable>
+              {activeGroup && (
+                <Pressable
+                  onPress={() => router.push('/nuevo-gasto')}
+                  style={[styles.iconBtn, { backgroundColor: theme.primary }]}>
+                  <PlusIcon size={17} color={theme.primaryOn} strokeWidth={2.2} />
+                </Pressable>
+              )}
             </View>
           </View>
 
+          {!activeGroup && <NoGroupCard message="Crea un grupo o únete a uno para llevar los gastos compartidos del hogar." />}
+
+          {activeGroup && (
+            <>
           {/* Balance */}
           <Card padding={16} style={{ gap: Spacing.three }}>
             <Text style={{ color: theme.textSecondary, fontFamily: Fonts.bodyMedium, fontSize: 12.5 }}>
@@ -148,6 +155,8 @@ export default function GastosScreen() {
               </Pressable>
             ))}
           </Section>
+            </>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>

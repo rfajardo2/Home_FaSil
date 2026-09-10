@@ -8,6 +8,7 @@ import { PlusIcon, RepeatIcon, SearchIcon } from '@/components/icons';
 import { Card } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
 import { IconCircle } from '@/components/ui/IconCircle';
+import { NoGroupCard } from '@/components/ui/NoGroupCard';
 import { StatusCheck } from '@/components/ui/StatusCheck';
 import { Fonts, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { useAppData } from '@/hooks/use-app-data';
@@ -24,7 +25,7 @@ const FREQUENCY_LABEL: Record<TaskRow['recurrence'], string> = {
 
 export default function TareasScreen() {
   const theme = useTheme();
-  const { categories, members, tasks, toggleTask, claimTask } = useAppData();
+  const { activeGroup, categories, members, tasks, toggleTask, claimTask } = useAppData();
   const { category: categoryParam } = useLocalSearchParams<{ category?: string }>();
   const [activeCategory, setActiveCategory] = useState<string | null>(categoryParam ?? null);
 
@@ -47,15 +48,23 @@ export default function TareasScreen() {
             <Pressable style={[styles.iconBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <SearchIcon size={17} color={theme.textSecondary} />
             </Pressable>
-            <Pressable
-              onPress={() => router.push('/nueva-tarea')}
-              style={[styles.iconBtn, { backgroundColor: theme.primary }]}>
-              <PlusIcon size={17} color={theme.primaryOn} strokeWidth={2.2} />
-            </Pressable>
+            {activeGroup && (
+              <Pressable
+                onPress={() => router.push('/nueva-tarea')}
+                style={[styles.iconBtn, { backgroundColor: theme.primary }]}>
+                <PlusIcon size={17} color={theme.primaryOn} strokeWidth={2.2} />
+              </Pressable>
+            )}
           </View>
         </View>
       </View>
 
+      {!activeGroup ? (
+        <View style={styles.center}>
+          <NoGroupCard message="Crea un grupo o únete a uno para ver y crear tareas." />
+        </View>
+      ) : (
+        <>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -128,6 +137,8 @@ export default function TareasScreen() {
           )}
         </View>
       </ScrollView>
+        </>
+      )}
     </SafeAreaView>
   );
 }

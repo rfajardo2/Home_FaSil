@@ -1,34 +1,21 @@
-import { router } from 'expo-router';
 import { Tabs, TabList, TabSlot, TabTrigger, type TabTriggerSlotProps } from 'expo-router/ui';
-import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HomeIcon, TasksIcon, UsersIcon, WalletIcon, type IconProps } from '@/components/icons';
 import { Fonts, MaxContentWidth, Spacing } from '@/constants/theme';
-import { useAppData } from '@/hooks/use-app-data';
 import { useTheme } from '@/hooks/use-theme';
-import { isSupabaseConfigured } from '@/lib/supabase';
 
 /**
  * Custom bottom tab bar (headless `expo-router/ui` Tabs) so the exact same
  * design — icon + label, coral when active — renders identically on iOS,
  * Android and Web, instead of each platform's native tab bar chrome.
+ *
+ * Belonging to a group is optional — screens that need one (Tareas, Grupo,
+ * Gastos, Categorías) show their own prompt to create/join one instead of
+ * this layout gating access to the tabs themselves.
  */
 export default function TabsLayout() {
-  const { groups, loading } = useAppData();
-  const needsOnboarding = isSupabaseConfigured && !loading && groups.length === 0;
-
-  useEffect(() => {
-    if (needsOnboarding) {
-      router.replace('/nuevo-grupo');
-    }
-  }, [needsOnboarding]);
-
-  if (needsOnboarding) {
-    return null;
-  }
-
   return (
     <Tabs>
       <TabSlot />

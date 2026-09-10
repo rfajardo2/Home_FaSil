@@ -28,7 +28,7 @@ export default function GruposScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top']}>
-      <Header title="Mis grupos" showBack size="md" />
+      <Header title="Mis grupos" showBack fallbackHref="/" size="md" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.center}>
           {groups.map((group) => {

@@ -16,7 +16,7 @@ const GROUP_EMOJIS = ['🏠', '👨‍👩‍👧‍👦', '❤️', '⭐'];
 
 export default function NuevoGrupoScreen() {
   const theme = useTheme();
-  const { groups, createGroup, joinGroupByCode } = useAppData();
+  const { createGroup, joinGroupByCode } = useAppData();
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [colorIndex, setColorIndex] = useState(0);
@@ -25,10 +25,6 @@ export default function NuevoGrupoScreen() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
   const [creating, setCreating] = useState(false);
-
-  // Users land here forcibly when they have zero groups (see (tabs)/_layout.tsx);
-  // once they gain one, go straight to the app instead of leaving them stuck here.
-  const canGoBack = groups.length > 0;
 
   async function handleJoin() {
     if (joining) return;
@@ -62,7 +58,7 @@ export default function NuevoGrupoScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top', 'bottom']}>
-      <Header title="Nuevo grupo" showBack={canGoBack} size="md" />
+      <Header title="Nuevo grupo" showBack fallbackHref="/" size="md" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.center}>
           <Field label="Unirme con un código de invitación">

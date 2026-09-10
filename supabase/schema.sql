@@ -38,7 +38,12 @@ create table if not exists public.profiles (
   name text not null,
   avatar_color text not null default '#E86545',
   initials text not null,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  -- Added alongside username support. Nullable so existing rows (created
+  -- before this column existed) stay valid; every new signup fills them in.
+  first_name text,
+  last_name text,
+  username text
 );
 
 alter table public.profiles enable row level security;
@@ -57,6 +62,30 @@ create policy "users can insert their own profile"
   on public.profiles for insert
   to authenticated
   with check (id = auth.uid());
+
+-- Case-insensitive uniqueness: "RubenF" and "rubenf" are the same handle.
+-- Partial (only enforced where set) so it never conflicts with older rows
+-- that predate the username column and still have it null.
+create unique index if not exists profiles_username_unique_idx
+  on public.profiles (lower(username))
+  where username is not null;
+
+-- Lets the (unauthenticated) sign-up screen check handle availability before
+-- creating the account. SECURITY DEFINER so it can read `profiles` despite
+-- running as `anon`, but it only ever returns a boolean — no row data leaks.
+create or replace function public.is_username_available(check_username text)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select not exists (
+    select 1 from public.profiles where lower(username) = lower(check_username)
+  );
+$$;
+
+grant execute on function public.is_username_available(text) to anon, authenticated;
 
 -- ----------------------------------------------------------------------------
 -- groups  (households / family groups)

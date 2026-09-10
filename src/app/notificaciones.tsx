@@ -58,6 +58,7 @@ export default function NotificacionesScreen() {
       <Header
         title="Notificaciones"
         showBack
+        fallbackHref="/"
         size="md"
         right={
           <Pressable onPress={() => markAllNotificationsRead()}>

@@ -9,19 +9,34 @@ type HeaderProps = {
   title: string;
   /** Shows a back chevron that pops the current screen. Omit for tab roots. */
   showBack?: boolean;
+  /**
+   * Route to go to when there's no screen history to pop (e.g. this screen
+   * was reached directly, not pushed on top of another). Without this, the
+   * back button silently does nothing when there's nothing to go back to.
+   */
+  fallbackHref?: string;
   right?: React.ReactNode;
   size?: 'lg' | 'md';
 };
 
 /** Custom screen header — every screen builds its own instead of the native one, so it matches the mockup exactly. */
-export function Header({ title, showBack, right, size = 'lg' }: HeaderProps) {
+export function Header({ title, showBack, fallbackHref, right, size = 'lg' }: HeaderProps) {
   const theme = useTheme();
+
+  function handleBack() {
+    if (router.canGoBack()) {
+      router.back();
+    } else if (fallbackHref) {
+      router.replace(fallbackHref as Parameters<typeof router.replace>[0]);
+    }
+  }
+
   return (
     <View style={styles.row}>
       <View style={styles.left}>
         {showBack && (
           <Pressable
-            onPress={() => router.back()}
+            onPress={handleBack}
             style={[styles.iconBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <ChevronLeftIcon size={17} color={theme.text} />
           </Pressable>

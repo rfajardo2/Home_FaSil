@@ -7,6 +7,7 @@ import { BellIcon, ChevronDownIcon, HomeIcon, PlusIcon, StarIcon, TrophyIcon } f
 import { Avatar } from '@/components/ui/Avatar';
 import { Card } from '@/components/ui/Card';
 import { IconCircle } from '@/components/ui/IconCircle';
+import { NoGroupCard } from '@/components/ui/NoGroupCard';
 import { ProgressRing } from '@/components/ui/ProgressRing';
 import { StatusCheck } from '@/components/ui/StatusCheck';
 import { Fonts, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
@@ -18,9 +19,10 @@ import { taskDueLabel } from '@/lib/task-due-label';
 export default function InicioScreen() {
   const theme = useTheme();
   const { session } = useAuth();
-  const { activeGroup, members, categories, tasks, notifications, toggleTask } = useAppData();
+  const { activeGroup, members, myProfile, categories, tasks, notifications, toggleTask } = useAppData();
 
   const you = members.find((m) => m.id === session?.user?.id) ?? members[0];
+  const displayName = you?.name ?? myProfile?.name;
   const hasUnreadNotifications = notifications.some((n) => n.unread);
   const todayTasks = tasks.filter((t) => taskDueLabel(t) === 'Hoy');
   const todayAssigned = todayTasks.filter((t) => t.assignee_id);
@@ -40,7 +42,7 @@ export default function InicioScreen() {
                 Hola de nuevo
               </Text>
               <Text style={[styles.name, { color: theme.text, fontFamily: Fonts.display }]}>
-                {you?.name ?? '...'}
+                {displayName ?? '...'}
               </Text>
             </View>
             <Pressable
@@ -66,6 +68,14 @@ export default function InicioScreen() {
             <ChevronDownIcon size={12} color={theme.textFaint} strokeWidth={2.2} />
           </Pressable>
 
+          {!activeGroup && (
+            <View style={{ marginTop: Spacing.five }}>
+              <NoGroupCard message="Crea un grupo o únete a uno para ver y compartir tareas, gastos y el ranking familiar." />
+            </View>
+          )}
+
+          {activeGroup && (
+            <>
           {/* Progress card */}
           <Card style={styles.progressCard} padding={16}>
             <View>
@@ -191,6 +201,8 @@ export default function InicioScreen() {
             <QuickAction label="Gasto" onPress={() => router.push('/nuevo-gasto')} />
             <QuickAction label="Evento" onPress={() => router.push('/nueva-tarea')} />
           </View>
+            </>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>

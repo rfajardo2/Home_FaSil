@@ -26,7 +26,7 @@ export default function FacturaDetalleScreen() {
   if (!expense) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top', 'bottom']}>
-        <Header title="Detalle de gasto" showBack size="md" />
+        <Header title="Detalle de gasto" showBack fallbackHref="/gastos" size="md" />
         <Text style={{ color: theme.textFaint, fontFamily: Fonts.body, fontSize: 13, textAlign: 'center', marginTop: Spacing.six }}>
           No encontramos este gasto.
         </Text>

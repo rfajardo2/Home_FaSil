@@ -17,12 +17,46 @@ async function ensureProfile(user: User) {
   const { data: existing } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle();
   if (existing) return;
 
-  const name = (user.user_metadata?.name as string | undefined)?.trim() || user.email?.split('@')[0] || 'Usuario';
-  const initials = name.slice(0, 1).toUpperCase();
+  const meta = user.user_metadata ?? {};
+  const firstName = (meta.first_name as string | undefined)?.trim() || null;
+  const lastName = (meta.last_name as string | undefined)?.trim() || null;
+  const name = [firstName, lastName].filter(Boolean).join(' ') || user.email?.split('@')[0] || 'Usuario';
+  const initials = (firstName?.[0] ?? name[0] ?? 'U').toUpperCase();
   const avatarColor = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
+  const requestedUsername = (meta.username as string | undefined)?.trim().toLowerCase() || null;
 
-  await supabase.from('profiles').insert({ id: user.id, name, initials, avatar_color: avatarColor });
+  const baseInsert = { id: user.id, name, initials, avatar_color: avatarColor, first_name: firstName, last_name: lastName };
+
+  if (!requestedUsername) {
+    await supabase.from('profiles').insert(baseInsert);
+    return;
+  }
+
+  // The username was checked for availability in the sign-up form, but that
+  // was a best-effort UX check (anon role, no lock) — someone else could
+  // have taken it in the meantime. The unique index on profiles is the real
+  // guard, so on conflict fall back to a suffixed variant instead of failing
+  // account creation outright (there's no interactive UI to ask again here).
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidate = attempt === 0 ? requestedUsername : `${requestedUsername}${Math.floor(Math.random() * 9000) + attempt * 137}`;
+    const { error } = await supabase.from('profiles').insert({ ...baseInsert, username: candidate });
+    if (!error) return;
+    if (error.code !== '23505') {
+      console.warn('[auth] no se pudo crear el perfil:', error.message);
+      return;
+    }
+  }
+  // Last resort: create the profile without a username rather than lose the account.
+  await supabase.from('profiles').insert(baseInsert);
 }
+
+type SignUpInput = {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  username: string;
+};
 
 type AuthContextValue = {
   session: Session | null;
@@ -30,7 +64,9 @@ type AuthContextValue = {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   /** Returns `needsEmailConfirmation: true` when Supabase requires confirming the email before a session exists. */
-  signUp: (email: string, password: string, name: string) => Promise<{ error: string | null; needsEmailConfirmation: boolean }>;
+  signUp: (input: SignUpInput) => Promise<{ error: string | null; needsEmailConfirmation: boolean }>;
+  /** Best-effort pre-signup availability check (runs unauthenticated) — the real guard is the DB's unique index. */
+  checkUsernameAvailable: (username: string) => Promise<boolean>;
   signOut: () => Promise<void>;
 };
 
@@ -67,17 +103,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     session,
     loading,
     async signIn(email, password) {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
       return { error: error?.message ?? null };
     },
-    async signUp(email, password, name) {
+    async signUp({ email, password, firstName, lastName, username }) {
       const { data, error } = await supabase.auth.signUp({
-        email,
+        email: email.trim().toLowerCase(),
         password,
-        options: { data: { name: name.trim() } },
+        options: {
+          data: {
+            first_name: firstName.trim(),
+            last_name: lastName.trim(),
+            name: `${firstName.trim()} ${lastName.trim()}`.trim(),
+            username: username.trim().toLowerCase(),
+          },
+        },
       });
       if (error) return { error: error.message, needsEmailConfirmation: false };
+      // Supabase's anti-enumeration behavior: signing up with an email that's
+      // already registered returns success with no error, but `identities`
+      // comes back empty instead of containing the (non-existent) new one.
+      if (data.user && data.user.identities?.length === 0) {
+        return { error: 'User already registered', needsEmailConfirmation: false };
+      }
       return { error: null, needsEmailConfirmation: !data.session };
+    },
+    async checkUsernameAvailable(username) {
+      if (!isSupabaseConfigured) return true;
+      const { data, error } = await supabase.rpc('is_username_available', { check_username: username });
+      if (error) {
+        console.warn('[auth] no se pudo verificar el nombre de usuario:', error.message);
+        return true;
+      }
+      return Boolean(data);
     },
     async signOut() {
       await supabase.auth.signOut();

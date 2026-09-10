@@ -84,6 +84,7 @@ export default function NuevaTareaScreen() {
       <Header
         title="Nueva tarea"
         showBack
+        fallbackHref="/tareas"
         size="md"
         right={
           <Pressable onPress={handleSave} style={[styles.saveBtn, { backgroundColor: theme.primary }]}>

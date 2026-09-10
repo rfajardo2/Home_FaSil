@@ -117,6 +117,7 @@ export default function EstadisticasScreen() {
       <Header
         title="Estadísticas"
         showBack
+        fallbackHref="/gastos"
         size="md"
         right={
           <View style={[styles.iconBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}>

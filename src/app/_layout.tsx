@@ -78,6 +78,7 @@ function Navigation() {
         <Stack.Screen name="categorias" />
         <Stack.Screen name="estadisticas" />
         <Stack.Screen name="notificaciones" />
+        <Stack.Screen name="perfil" />
         <Stack.Screen name="factura/[id]" />
       </Stack.Protected>
       <Stack.Protected guard={!authed}>
