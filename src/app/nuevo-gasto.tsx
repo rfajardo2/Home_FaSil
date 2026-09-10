@@ -12,6 +12,7 @@ import { BottomTabInset, Fonts, MaxContentWidth, Radii, Spacing } from '@/consta
 import { useAppData } from '@/hooks/use-app-data';
 import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
+import { formatMoney } from '@/lib/format-money';
 
 export default function NuevoGastoScreen() {
   const theme = useTheme();
@@ -22,7 +23,9 @@ export default function NuevoGastoScreen() {
   const [creatingAccount, setCreatingAccount] = useState(false);
   const [newAccountName, setNewAccountName] = useState('');
   const [merchant, setMerchant] = useState('');
+  // Raw digits only (e.g. "3466646") — displayed formatted as COP, see `displayTotal`.
   const [total, setTotal] = useState('');
+  const displayTotal = total ? formatMoney(Number(total)) : '';
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [paidBy, setPaidBy] = useState<string | null>(session?.user?.id ?? null);
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +47,7 @@ export default function NuevoGastoScreen() {
   async function handleSave() {
     if (saving) return;
     setError(null);
-    const totalNumber = Number(total.replace(/[^\d.]/g, ''));
+    const totalNumber = Number(total);
     if (!merchant.trim()) {
       setError('Dile dónde fue el gasto.');
       return;
@@ -142,9 +145,9 @@ export default function NuevoGastoScreen() {
 
           <Field label="Total">
             <TextInput
-              value={total}
-              onChangeText={setTotal}
-              placeholder="0"
+              value={displayTotal}
+              onChangeText={(text) => setTotal(text.replace(/[^\d]/g, ''))}
+              placeholder="$0"
               placeholderTextColor={theme.textFaint}
               keyboardType="numeric"
               style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.surface }]}
