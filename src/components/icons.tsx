@@ -197,6 +197,21 @@ export function SlidersIcon({ size = 20, color = '#000', strokeWidth = 1.8 }: Ic
   );
 }
 
+export function GearIcon({ size = 20, color = '#000', strokeWidth = 1.8 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Circle cx={12} cy={12} r={7.5} stroke={color} {...base(strokeWidth)} />
+      <Circle cx={12} cy={12} r={2.6} stroke={color} {...base(strokeWidth)} />
+      <Line x1={19.5} y1={12} x2={22} y2={12} stroke={color} {...base(strokeWidth)} />
+      <Line x1={15.8} y1={5.5} x2={17} y2={3.3} stroke={color} {...base(strokeWidth)} />
+      <Line x1={8.3} y1={5.5} x2={7} y2={3.3} stroke={color} {...base(strokeWidth)} />
+      <Line x1={4.5} y1={12} x2={2} y2={12} stroke={color} {...base(strokeWidth)} />
+      <Line x1={8.3} y1={18.5} x2={7} y2={20.7} stroke={color} {...base(strokeWidth)} />
+      <Line x1={15.8} y1={18.5} x2={17} y2={20.7} stroke={color} {...base(strokeWidth)} />
+    </Svg>
+  );
+}
+
 export function TrendingUpIcon({ size = 20, color = '#000', strokeWidth = 2.2 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">

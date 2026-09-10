@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { categoryStyle } from '@/components/category-style';
-import { BellIcon, ChevronDownIcon, HomeIcon, PlusIcon, StarIcon, TrophyIcon } from '@/components/icons';
+import { BellIcon, ChevronDownIcon, GearIcon, HomeIcon, PlusIcon, StarIcon, TrophyIcon } from '@/components/icons';
 import { Avatar } from '@/components/ui/Avatar';
 import { Card } from '@/components/ui/Card';
 import { IconCircle } from '@/components/ui/IconCircle';
@@ -41,9 +41,17 @@ export default function InicioScreen() {
               <Text style={[styles.hello, { color: theme.textSecondary, fontFamily: Fonts.body }]}>
                 Hola de nuevo
               </Text>
-              <Text style={[styles.name, { color: theme.text, fontFamily: Fonts.display }]}>
-                {displayName ?? '...'}
-              </Text>
+              <View style={styles.nameRow}>
+                <Text style={[styles.name, { color: theme.text, fontFamily: Fonts.display }]}>
+                  {displayName ?? '...'}
+                </Text>
+                <Pressable
+                  onPress={() => router.push('/perfil')}
+                  hitSlop={8}
+                  style={[styles.gearBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                  <GearIcon size={14} color={theme.textSecondary} />
+                </Pressable>
+              </View>
             </View>
             <Pressable
               onPress={() => router.push('/notificaciones')}
@@ -280,7 +288,16 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.three,
   },
   hello: { fontSize: 13 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   name: { fontSize: 23 },
+  gearBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: Radii.pill,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   bellBtn: {
     width: 40,
     height: 40,

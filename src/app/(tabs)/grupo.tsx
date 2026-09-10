@@ -42,7 +42,7 @@ export default function GrupoScreen() {
               </Text>
             </View>
             <Pressable
-              onPress={() => router.push('/perfil')}
+              onPress={() => router.push('/grupos')}
               style={[styles.iconBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <SlidersIcon size={17} color={theme.textSecondary} />
             </Pressable>

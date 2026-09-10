@@ -166,6 +166,7 @@ type AppDataContextValue = {
   /** The signed-in user's own profile — available even when they belong to no group. */
   myProfile: ProfileRow | null;
   refreshMyProfile: () => Promise<void>;
+  updateProfile: (input: { firstName: string; lastName: string }) => Promise<{ error: string | null }>;
   categories: CategoryRow[];
   tasks: TaskRow[];
   sharedAccounts: SharedAccountRow[];
@@ -527,6 +528,24 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     await loadGroupContent(activeGroupId);
   }
 
+  async function updateProfile(input: { firstName: string; lastName: string }): Promise<{ error: string | null }> {
+    if (!isSupabaseConfigured || !userId) return { error: 'Supabase no está configurado.' };
+    const firstName = input.firstName.trim();
+    const lastName = input.lastName.trim();
+    if (!firstName) return { error: 'El nombre no puede estar vacío.' };
+    const name = [firstName, lastName].filter(Boolean).join(' ');
+    const initials = firstName[0].toUpperCase();
+    const { error } = await supabase
+      .from('profiles')
+      .update({ first_name: firstName, last_name: lastName || null, name, initials })
+      .eq('id', userId);
+    if (error) return { error: error.message };
+    await loadMyProfile();
+    // Keep member lists (ranking, task assignees, ...) showing the new name/initials right away.
+    if (activeGroupId) await loadGroupContent(activeGroupId);
+    return { error: null };
+  }
+
   const value: AppDataContextValue = {
     loading: groupsLoading || contentLoading,
     groups,
@@ -538,6 +557,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     members,
     myProfile,
     refreshMyProfile: loadMyProfile,
+    updateProfile,
     categories,
     tasks,
     sharedAccounts,
