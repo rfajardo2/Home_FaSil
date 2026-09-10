@@ -2,16 +2,34 @@ import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { CategoryIcon } from '@/components/CategoryIcon';
-import { PlusIcon, ReceiptIcon, TrendingUpIcon } from '@/components/icons';
+import { PlusIcon, ReceiptIcon, TrendingUpIcon, WalletIcon } from '@/components/icons';
 import { Avatar } from '@/components/ui/Avatar';
 import { Card } from '@/components/ui/Card';
+import { IconCircle } from '@/components/ui/IconCircle';
 import { Fonts, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
-import { findMember, RECENT_EXPENSES, SHARED_ACCOUNTS } from '@/data/mock';
+import { useAppData } from '@/hooks/use-app-data';
+import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
+import { formatMoney } from '@/lib/format-money';
 
 export default function GastosScreen() {
   const theme = useTheme();
+  const { session } = useAuth();
+  const { members, sharedAccounts, expenses } = useAppData();
+  const userId = session?.user?.id;
+
+  let owedToYou = 0;
+  let youOwe = 0;
+  for (const expense of expenses) {
+    for (const split of expense.expense_splits) {
+      if (split.settled || split.profile_id === expense.paid_by) continue;
+      if (expense.paid_by === userId) owedToYou += split.amount;
+      if (split.profile_id === userId) youOwe += split.amount;
+    }
+  }
+
+  const now = new Date();
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top']}>
@@ -25,7 +43,9 @@ export default function GastosScreen() {
                 style={[styles.iconBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 <TrendingUpIcon size={16} color={theme.textSecondary} strokeWidth={1.9} />
               </Pressable>
-              <Pressable style={[styles.iconBtn, { backgroundColor: theme.primary }]}>
+              <Pressable
+                onPress={() => router.push('/nuevo-gasto')}
+                style={[styles.iconBtn, { backgroundColor: theme.primary }]}>
                 <PlusIcon size={17} color={theme.primaryOn} strokeWidth={2.2} />
               </Pressable>
             </View>
@@ -41,48 +61,71 @@ export default function GastosScreen() {
                 <Text style={{ color: theme.textSecondary, fontFamily: Fonts.bodyMedium, fontSize: 11 }}>
                   Te deben
                 </Text>
-                <Text style={{ color: theme.success, fontFamily: Fonts.display, fontSize: 17 }}>$65.000</Text>
+                <Text style={{ color: theme.success, fontFamily: Fonts.display, fontSize: 17 }}>
+                  {formatMoney(owedToYou)}
+                </Text>
               </View>
               <View style={[styles.balanceTile, { backgroundColor: theme.dangerSoft }]}>
                 <Text style={{ color: theme.textSecondary, fontFamily: Fonts.bodyMedium, fontSize: 11 }}>
                   Debes
                 </Text>
-                <Text style={{ color: theme.danger, fontFamily: Fonts.display, fontSize: 17 }}>$20.000</Text>
+                <Text style={{ color: theme.danger, fontFamily: Fonts.display, fontSize: 17 }}>
+                  {formatMoney(youOwe)}
+                </Text>
               </View>
             </View>
           </Card>
 
           {/* Cuentas compartidas */}
           <Section title="Cuentas compartidas">
-            {SHARED_ACCOUNTS.map((account) => (
-              <Card key={account.id} style={styles.accountRow} padding={12}>
-                <CategoryIcon categoryId={account.categoryId} />
-                <View style={styles.flexGrow}>
-                  <Text style={{ color: theme.text, fontFamily: Fonts.bodyMedium, fontSize: 14 }}>
-                    {account.name}
-                  </Text>
-                  <Text style={{ color: theme.textSecondary, fontFamily: Fonts.body, fontSize: 11.5 }}>
-                    {account.monthTotalLabel}
-                  </Text>
-                </View>
-                <View style={styles.avatarStack}>
-                  {account.memberIds.map((id, i) => {
-                    const m = findMember(id);
-                    if (!m) return null;
-                    return (
-                      <View key={id} style={{ marginLeft: i === 0 ? 0 : -6 }}>
-                        <Avatar initials={m.initials} color={m.avatarColor} size={26} />
-                      </View>
-                    );
-                  })}
-                </View>
-              </Card>
-            ))}
+            {sharedAccounts.length === 0 && (
+              <Text style={{ color: theme.textFaint, fontFamily: Fonts.body, fontSize: 12.5 }}>
+                Todavía no hay cuentas compartidas. Crea un gasto para empezar una.
+              </Text>
+            )}
+            {sharedAccounts.map((account) => {
+              const accountExpenses = expenses.filter((e) => e.account_id === account.id);
+              const monthTotal = accountExpenses
+                .filter((e) => e.expense_date.startsWith(monthKey))
+                .reduce((sum, e) => sum + e.total, 0);
+              const participantIds = [...new Set(accountExpenses.flatMap((e) => e.expense_splits.map((s) => s.profile_id)))];
+              return (
+                <Card key={account.id} style={styles.accountRow} padding={12}>
+                  <IconCircle size={40} background={theme.primarySoft}>
+                    <WalletIcon size={18} color={theme.primary} />
+                  </IconCircle>
+                  <View style={styles.flexGrow}>
+                    <Text style={{ color: theme.text, fontFamily: Fonts.bodyMedium, fontSize: 14 }}>
+                      {account.name}
+                    </Text>
+                    <Text style={{ color: theme.textSecondary, fontFamily: Fonts.body, fontSize: 11.5 }}>
+                      {formatMoney(monthTotal)} este mes
+                    </Text>
+                  </View>
+                  <View style={styles.avatarStack}>
+                    {participantIds.slice(0, 4).map((id, i) => {
+                      const m = members.find((mm) => mm.id === id);
+                      if (!m) return null;
+                      return (
+                        <View key={id} style={{ marginLeft: i === 0 ? 0 : -6 }}>
+                          <Avatar initials={m.initials} color={m.avatar_color} size={26} />
+                        </View>
+                      );
+                    })}
+                  </View>
+                </Card>
+              );
+            })}
           </Section>
 
           {/* Gastos recientes */}
           <Section title="Gastos recientes">
-            {RECENT_EXPENSES.map((expense) => (
+            {expenses.length === 0 && (
+              <Text style={{ color: theme.textFaint, fontFamily: Fonts.body, fontSize: 12.5 }}>
+                Todavía no hay gastos registrados.
+              </Text>
+            )}
+            {expenses.map((expense) => (
               <Pressable key={expense.id} onPress={() => router.push(`/factura/${expense.id}`)}>
                 <Card style={styles.accountRow} padding={12}>
                   <View style={[styles.receiptIconWrap, { backgroundColor: theme.surfaceAlt }]}>
@@ -93,11 +136,13 @@ export default function GastosScreen() {
                       {expense.merchant}
                     </Text>
                     <Text style={{ color: theme.textSecondary, fontFamily: Fonts.body, fontSize: 11.5 }}>
-                      {expense.dateLabel} · dividido entre {expense.splitCount}
+                      {new Date(`${expense.expense_date}T00:00:00`).toLocaleDateString('es', { day: 'numeric', month: 'short' })}
+                      {' · dividido entre '}
+                      {expense.expense_splits.length}
                     </Text>
                   </View>
                   <Text style={{ color: theme.text, fontFamily: Fonts.display, fontSize: 14 }}>
-                    {expense.totalLabel}
+                    {formatMoney(expense.total)}
                   </Text>
                 </Card>
               </Pressable>

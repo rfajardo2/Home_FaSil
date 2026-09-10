@@ -74,6 +74,7 @@ function Navigation() {
         <Stack.Screen name="grupos" />
         <Stack.Screen name="nuevo-grupo" />
         <Stack.Screen name="nueva-tarea" />
+        <Stack.Screen name="nuevo-gasto" />
         <Stack.Screen name="categorias" />
         <Stack.Screen name="estadisticas" />
         <Stack.Screen name="notificaciones" />

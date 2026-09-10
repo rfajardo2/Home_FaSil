@@ -1,3 +1,5 @@
+import { useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -6,17 +8,46 @@ import { Avatar } from '@/components/ui/Avatar';
 import { PrimaryButton } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Header } from '@/components/ui/Header';
-import { BottomTabInset, Fonts, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
-import { findMember, INVOICE_DETAIL } from '@/data/mock';
+import { BottomTabInset, Fonts, MaxContentWidth, Spacing } from '@/constants/theme';
+import { useAppData } from '@/hooks/use-app-data';
+import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
+import { formatMoney } from '@/lib/format-money';
 
 export default function FacturaDetalleScreen() {
   const theme = useTheme();
-  const invoice = INVOICE_DETAIL;
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const { session } = useAuth();
+  const { expenses, members, sharedAccounts, settleExpense } = useAppData();
+  const [settling, setSettling] = useState(false);
+
+  const expense = expenses.find((e) => e.id === id);
+
+  if (!expense) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top', 'bottom']}>
+        <Header title="Detalle de gasto" showBack size="md" />
+        <Text style={{ color: theme.textFaint, fontFamily: Fonts.body, fontSize: 13, textAlign: 'center', marginTop: Spacing.six }}>
+          No encontramos este gasto.
+        </Text>
+      </SafeAreaView>
+    );
+  }
+
+  const account = sharedAccounts.find((a) => a.id === expense.account_id);
+  const paidByMember = members.find((m) => m.id === expense.paid_by);
+  const allSettled = expense.expense_splits.every((s) => s.settled);
+
+  async function handleSettle() {
+    if (settling) return;
+    setSettling(true);
+    await settleExpense(expense!.id);
+    setSettling(false);
+  }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top', 'bottom']}>
-      <Header title="Detalle de factura" showBack size="md" />
+      <Header title="Detalle de gasto" showBack size="md" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.center}>
           <Card padding={18} style={styles.receiptCard}>
@@ -24,74 +55,62 @@ export default function FacturaDetalleScreen() {
               <ReceiptIcon size={26} color={theme.primary} strokeWidth={1.5} />
             </View>
             <View style={styles.flexGrow}>
-              <Text style={{ color: theme.text, fontFamily: Fonts.bodyBold, fontSize: 15 }}>{invoice.merchant}</Text>
+              <Text style={{ color: theme.text, fontFamily: Fonts.bodyBold, fontSize: 15 }}>{expense.merchant}</Text>
               <Text style={{ color: theme.textSecondary, fontFamily: Fonts.body, fontSize: 11.5 }}>
-                {invoice.dateLabel} · {invoice.itemCount} ítems
+                {new Date(`${expense.expense_date}T00:00:00`).toLocaleDateString('es', { day: 'numeric', month: 'short' })}
+                {account ? ` · ${account.name}` : ''}
+                {paidByMember ? ` · pagó ${paidByMember.id === session?.user?.id ? 'Tú' : paidByMember.name}` : ''}
               </Text>
               <Text style={{ color: theme.text, fontFamily: Fonts.display, fontSize: 19, marginTop: 2 }}>
-                {invoice.totalLabel}
+                {formatMoney(expense.total)}
               </Text>
             </View>
           </Card>
 
-          <Section title="Detalle de ítems">
-            <Card padding={0} style={{ paddingHorizontal: Spacing.four }}>
-              {invoice.items.map((item, i) => {
-                const assignee = findMember(item.assigneeId);
-                return (
-                  <View
-                    key={item.id}
-                    style={[styles.row, { borderBottomWidth: 1, borderBottomColor: theme.border }]}>
-                    <Text style={[styles.flexGrow, { color: theme.text, fontFamily: Fonts.bodyMedium, fontSize: 13.5 }]}>
-                      {item.label}
-                    </Text>
-                    {assignee && <Avatar initials={assignee.initials} color={assignee.avatarColor} size={22} />}
-                    <Text style={[styles.amountCol, { color: theme.text, fontFamily: Fonts.bodyBold }]}>
-                      {item.amountLabel}
-                    </Text>
-                  </View>
-                );
-              })}
-              <View style={styles.row}>
-                <Text style={[styles.flexGrow, { color: theme.textSecondary, fontFamily: Fonts.bodyMedium, fontSize: 13.5 }]}>
-                  {invoice.otherItemsLabel}
-                </Text>
-                <Text style={[styles.amountCol, { color: theme.textSecondary, fontFamily: Fonts.bodyBold }]}>
-                  {invoice.otherItemsAmountLabel}
-                </Text>
-              </View>
-            </Card>
-          </Section>
-
-          <Section title={`División entre ${invoice.splits.length}`}>
-            <Card padding={0} style={{ paddingHorizontal: Spacing.four }}>
-              {invoice.splits.map((split, i) => {
-                const member = findMember(split.memberId);
-                if (!member) return null;
-                return (
-                  <View
-                    key={split.memberId}
-                    style={[
-                      styles.row,
-                      i < invoice.splits.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border },
-                    ]}>
-                    <Avatar initials={member.initials} color={member.avatarColor} size={28} />
-                    <Text style={[styles.flexGrow, { color: theme.text, fontFamily: Fonts.bodyMedium, fontSize: 13.5 }]}>
-                      {member.isYou ? `${member.name} (tú)` : member.name}
-                    </Text>
-                    <Text style={{ color: theme.text, fontFamily: Fonts.bodyBold, fontSize: 13.5 }}>
-                      {split.amountLabel}
-                    </Text>
-                  </View>
-                );
-              })}
-            </Card>
+          <Section title={`División entre ${expense.expense_splits.length}`}>
+            {expense.expense_splits.length === 0 ? (
+              <Text style={{ color: theme.textFaint, fontFamily: Fonts.body, fontSize: 12.5 }}>
+                Este gasto no tiene una división registrada.
+              </Text>
+            ) : (
+              <Card padding={0} style={{ paddingHorizontal: Spacing.four }}>
+                {expense.expense_splits.map((split, i) => {
+                  const member = members.find((m) => m.id === split.profile_id);
+                  if (!member) return null;
+                  return (
+                    <View
+                      key={split.id}
+                      style={[
+                        styles.row,
+                        i < expense.expense_splits.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border },
+                      ]}>
+                      <Avatar initials={member.initials} color={member.avatar_color} size={28} />
+                      <Text style={[styles.flexGrow, { color: theme.text, fontFamily: Fonts.bodyMedium, fontSize: 13.5 }]}>
+                        {member.id === session?.user?.id ? `${member.name} (tú)` : member.name}
+                      </Text>
+                      <Text
+                        style={{
+                          color: split.settled ? theme.success : theme.text,
+                          fontFamily: Fonts.bodyBold,
+                          fontSize: 13.5,
+                        }}>
+                        {formatMoney(split.amount)}
+                        {split.settled ? ' ✓' : ''}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </Card>
+            )}
           </Section>
         </View>
       </ScrollView>
 
       <View style={[styles.ctaWrap, { paddingBottom: BottomTabInset + Spacing.three }]}>
-        <PrimaryButton label="Confirmar división" />
+        <PrimaryButton
+          label={allSettled ? 'División confirmada' : settling ? 'Confirmando...' : 'Confirmar división'}
+          onPress={allSettled ? undefined : handleSettle}
+        />
       </View>
     </SafeAreaView>
   );
@@ -114,6 +133,5 @@ const styles = StyleSheet.create({
   receiptIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
   flexGrow: { flex: 1, minWidth: 0 },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingVertical: 10 },
-  amountCol: { fontSize: 13, minWidth: 56, textAlign: 'right' },
   ctaWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: Spacing.five, paddingTop: Spacing.three },
 });

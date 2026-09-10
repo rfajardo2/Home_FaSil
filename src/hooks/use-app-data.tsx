@@ -1,9 +1,16 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import { CATEGORIES } from '@/constants/theme';
-import { GROUPS, MEMBERS, TASKS } from '@/data/mock';
+import { GROUPS, MEMBERS, RECENT_EXPENSES, SHARED_ACCOUNTS, TASKS } from '@/data/mock';
 import { useAuth } from '@/hooks/use-auth';
-import type { CategoryRow, GroupMembership, MemberRow, TaskRow } from '@/lib/database-types';
+import type {
+  CategoryRow,
+  ExpenseRow,
+  GroupMembership,
+  MemberRow,
+  SharedAccountRow,
+  TaskRow,
+} from '@/lib/database-types';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 
 // ---------------------------------------------------------------------------
@@ -61,6 +68,45 @@ const MOCK_TASKS: TaskRow[] = TASKS.map((t) => ({
   status: t.status === 'hecha' ? 'done' : 'pending',
 }));
 
+const MOCK_SHARED_ACCOUNTS: SharedAccountRow[] = SHARED_ACCOUNTS.map((a) => ({
+  id: a.id,
+  group_id: MOCK_GROUPS[0].id,
+  name: a.name,
+  icon: 'wallet',
+  currency: 'USD',
+  created_by: 'demo',
+}));
+
+function parseMoneyLabel(label: string): number {
+  return Number(label.replace(/[^\d]/g, '')) || 0;
+}
+
+const MOCK_EXPENSES: ExpenseRow[] = RECENT_EXPENSES.map((e, i) => {
+  const total = parseMoneyLabel(e.totalLabel);
+  const accountId = MOCK_SHARED_ACCOUNTS[i % MOCK_SHARED_ACCOUNTS.length]?.id ?? '';
+  const participants = MEMBERS.slice(0, e.splitCount);
+  return {
+    id: e.id,
+    account_id: accountId,
+    group_id: MOCK_GROUPS[0].id,
+    category_id: null,
+    merchant: e.merchant,
+    total,
+    currency: 'USD',
+    paid_by: MEMBERS[0].id,
+    receipt_url: null,
+    expense_date: inDays(0),
+    expense_splits: participants.map((m) => ({
+      id: `${e.id}-${m.id}`,
+      expense_id: e.id,
+      group_id: MOCK_GROUPS[0].id,
+      profile_id: m.id,
+      amount: Math.round((total / (participants.length || 1)) * 100) / 100,
+      settled: false,
+    })),
+  };
+});
+
 // ---------------------------------------------------------------------------
 
 type NewTaskInput = {
@@ -72,6 +118,16 @@ type NewTaskInput = {
   notes: string | null;
 };
 
+type NewExpenseInput = {
+  /** Existing shared account id, or null to create one named `newAccountName`. */
+  accountId: string | null;
+  newAccountName: string | null;
+  merchant: string;
+  total: number;
+  categoryId: string | null;
+  paidBy: string;
+};
+
 type AppDataContextValue = {
   /** True while the active group's members/categories/tasks are (re)loading. */
   loading: boolean;
@@ -81,12 +137,16 @@ type AppDataContextValue = {
   members: MemberRow[];
   categories: CategoryRow[];
   tasks: TaskRow[];
+  sharedAccounts: SharedAccountRow[];
+  expenses: ExpenseRow[];
   createGroup: (name: string, emoji: string) => Promise<{ error: string | null }>;
   joinGroupByCode: (code: string) => Promise<{ error: string | null }>;
   createCategory: (name: string, icon: string, color: string) => Promise<{ error: string | null }>;
   createTask: (input: NewTaskInput) => Promise<{ error: string | null }>;
   toggleTask: (task: TaskRow) => Promise<void>;
   claimTask: (task: TaskRow) => Promise<void>;
+  createExpense: (input: NewExpenseInput) => Promise<{ error: string | null }>;
+  settleExpense: (expenseId: string) => Promise<void>;
 };
 
 const AppDataContext = createContext<AppDataContextValue | null>(null);
@@ -104,6 +164,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [members, setMembers] = useState<MemberRow[]>(isSupabaseConfigured ? [] : MOCK_MEMBERS);
   const [categories, setCategories] = useState<CategoryRow[]>(isSupabaseConfigured ? [] : MOCK_CATEGORIES);
   const [tasks, setTasks] = useState<TaskRow[]>(isSupabaseConfigured ? [] : MOCK_TASKS);
+  const [sharedAccounts, setSharedAccounts] = useState<SharedAccountRow[]>(isSupabaseConfigured ? [] : MOCK_SHARED_ACCOUNTS);
+  const [expenses, setExpenses] = useState<ExpenseRow[]>(isSupabaseConfigured ? [] : MOCK_EXPENSES);
 
   const loadGroups = useCallback(async (): Promise<GroupMembership[]> => {
     if (!isSupabaseConfigured || !userId) return [];
@@ -125,15 +187,23 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const loadGroupContent = useCallback(async (groupId: string) => {
     if (!isSupabaseConfigured) return;
     setContentLoading(true);
-    const [membersRes, categoriesRes, tasksRes] = await Promise.all([
+    const [membersRes, categoriesRes, tasksRes, accountsRes, expensesRes] = await Promise.all([
       supabase.from('group_members').select('points, profiles(*)').eq('group_id', groupId),
       supabase.from('categories').select('*').eq('group_id', groupId).order('is_default', { ascending: false }),
       supabase.from('tasks').select('*').eq('group_id', groupId).order('created_at', { ascending: false }),
+      supabase.from('shared_accounts').select('*').eq('group_id', groupId).order('created_at', { ascending: true }),
+      supabase
+        .from('expenses')
+        .select('*, expense_splits(*)')
+        .eq('group_id', groupId)
+        .order('expense_date', { ascending: false }),
     ]);
     setContentLoading(false);
     if (membersRes.error) console.warn('[app-data] miembros:', membersRes.error.message);
     if (categoriesRes.error) console.warn('[app-data] categorías:', categoriesRes.error.message);
     if (tasksRes.error) console.warn('[app-data] tareas:', tasksRes.error.message);
+    if (accountsRes.error) console.warn('[app-data] cuentas compartidas:', accountsRes.error.message);
+    if (expensesRes.error) console.warn('[app-data] gastos:', expensesRes.error.message);
 
     const memberRows: MemberRow[] = (membersRes.data ?? [])
       .filter((row: any) => row.profiles)
@@ -141,6 +211,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     setMembers(memberRows);
     setCategories((categoriesRes.data as CategoryRow[]) ?? []);
     setTasks((tasksRes.data as TaskRow[]) ?? []);
+    setSharedAccounts((accountsRes.data as SharedAccountRow[]) ?? []);
+    setExpenses((expensesRes.data as unknown as ExpenseRow[]) ?? []);
   }, []);
 
   useEffect(() => {
@@ -151,6 +223,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       setMembers([]);
       setCategories([]);
       setTasks([]);
+      setSharedAccounts([]);
+      setExpenses([]);
       return;
     }
     loadGroups();
@@ -244,6 +318,63 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     if (activeGroupId) await loadGroupContent(activeGroupId);
   }
 
+  async function createExpense(input: NewExpenseInput): Promise<{ error: string | null }> {
+    if (!isSupabaseConfigured || !activeGroupId || !userId) return { error: 'Selecciona un grupo primero.' };
+
+    let accountId = input.accountId;
+    if (!accountId) {
+      const name = input.newAccountName?.trim();
+      if (!name) return { error: 'Elige o crea una cuenta compartida.' };
+      // Safe to use .select() here (unlike creating a *group*): the creator
+      // is already a member of `activeGroupId`, so the shared_accounts SELECT
+      // policy (is_group_member) is satisfied immediately, no trigger needed.
+      const { data, error } = await supabase
+        .from('shared_accounts')
+        .insert({ group_id: activeGroupId, name, created_by: userId })
+        .select()
+        .single();
+      if (error) return { error: error.message };
+      accountId = data.id;
+    }
+
+    const { data: expense, error: expenseError } = await supabase
+      .from('expenses')
+      .insert({
+        account_id: accountId,
+        group_id: activeGroupId,
+        category_id: input.categoryId,
+        merchant: input.merchant,
+        total: input.total,
+        paid_by: input.paidBy,
+      })
+      .select()
+      .single();
+    if (expenseError) return { error: expenseError.message };
+
+    const shareAmount = Math.round((input.total / (members.length || 1)) * 100) / 100;
+    const splits = members.map((m) => ({
+      expense_id: expense.id,
+      group_id: activeGroupId,
+      profile_id: m.id,
+      amount: shareAmount,
+    }));
+    const { error: splitsError } = await supabase.from('expense_splits').insert(splits);
+    if (splitsError) return { error: splitsError.message };
+
+    await loadGroupContent(activeGroupId);
+    return { error: null };
+  }
+
+  async function settleExpense(expenseId: string) {
+    if (!isSupabaseConfigured || !activeGroupId) return;
+    const { error } = await supabase.from('expense_splits').update({ settled: true }).eq('expense_id', expenseId);
+    if (error) {
+      console.warn('[app-data] no se pudo confirmar la división:', error.message);
+      return;
+    }
+    await loadGroupContent(activeGroupId);
+  }
+
   const value: AppDataContextValue = {
     loading: groupsLoading || contentLoading,
     groups,
@@ -252,12 +383,16 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     members,
     categories,
     tasks,
+    sharedAccounts,
+    expenses,
     createGroup,
     joinGroupByCode,
     createCategory,
     createTask,
     toggleTask,
     claimTask,
+    createExpense,
+    settleExpense,
   };
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;

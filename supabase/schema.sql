@@ -131,6 +131,11 @@ create policy "admins can update their group"
   to authenticated
   using (public.is_group_admin(id));
 
+create policy "admins can delete their group"
+  on public.groups for delete
+  to authenticated
+  using (public.is_group_admin(id));
+
 -- group_members policies
 create policy "members can view membership of their groups"
   on public.group_members for select

@@ -47,3 +47,36 @@ export type TaskRow = {
   recurrence: 'none' | 'daily' | 'weekly' | 'monthly';
   status: 'pending' | 'done';
 };
+
+export type SharedAccountRow = {
+  id: string;
+  group_id: string;
+  name: string;
+  icon: string;
+  currency: string;
+  created_by: string;
+};
+
+export type ExpenseSplitRow = {
+  id: string;
+  expense_id: string;
+  group_id: string;
+  profile_id: string;
+  amount: number;
+  settled: boolean;
+};
+
+export type ExpenseRow = {
+  id: string;
+  account_id: string;
+  group_id: string;
+  category_id: string | null;
+  merchant: string;
+  total: number;
+  currency: string;
+  paid_by: string;
+  receipt_url: string | null;
+  expense_date: string;
+  /** Embedded via PostgREST (`expense_splits(*)`). */
+  expense_splits: ExpenseSplitRow[];
+};

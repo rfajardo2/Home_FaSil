@@ -185,7 +185,7 @@ export default function InicioScreen() {
           {/* Quick actions */}
           <View style={styles.quickRow}>
             <QuickAction label="Tarea" primary onPress={() => router.push('/nueva-tarea')} />
-            <QuickAction label="Gasto" onPress={() => router.push('/gastos')} />
+            <QuickAction label="Gasto" onPress={() => router.push('/nuevo-gasto')} />
             <QuickAction label="Evento" onPress={() => router.push('/nueva-tarea')} />
           </View>
         </View>
