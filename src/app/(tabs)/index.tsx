@@ -18,9 +18,10 @@ import { taskDueLabel } from '@/lib/task-due-label';
 export default function InicioScreen() {
   const theme = useTheme();
   const { session } = useAuth();
-  const { activeGroup, members, categories, tasks, toggleTask } = useAppData();
+  const { activeGroup, members, categories, tasks, notifications, toggleTask } = useAppData();
 
   const you = members.find((m) => m.id === session?.user?.id) ?? members[0];
+  const hasUnreadNotifications = notifications.some((n) => n.unread);
   const todayTasks = tasks.filter((t) => taskDueLabel(t) === 'Hoy');
   const todayAssigned = todayTasks.filter((t) => t.assignee_id);
   const doneToday = todayAssigned.filter((t) => t.status === 'done').length;
@@ -46,7 +47,9 @@ export default function InicioScreen() {
               onPress={() => router.push('/notificaciones')}
               style={[styles.bellBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <BellIcon size={19} color={theme.textSecondary} />
-              <View style={[styles.bellDot, { backgroundColor: theme.primary, borderColor: theme.surface }]} />
+              {hasUnreadNotifications && (
+                <View style={[styles.bellDot, { backgroundColor: theme.primary, borderColor: theme.surface }]} />
+              )}
             </Pressable>
           </View>
 

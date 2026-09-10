@@ -12,14 +12,29 @@ import {
 import { Card } from '@/components/ui/Card';
 import { Header } from '@/components/ui/Header';
 import { AccentColors, Fonts, MaxContentWidth, Spacing } from '@/constants/theme';
-import { NOTIFICATIONS } from '@/data/mock';
+import { useAppData } from '@/hooks/use-app-data';
 import { useTheme } from '@/hooks/use-theme';
-import type { NotificationType } from '@/types';
+import type { NotificationRow, NotificationType } from '@/lib/database-types';
+import { relativeTimeLabel } from '@/lib/relative-time';
 
 export default function NotificacionesScreen() {
   const theme = useTheme();
-  const today = NOTIFICATIONS.slice(0, 4);
-  const yesterday = NOTIFICATIONS.slice(4);
+  const { notifications, markNotificationRead, markAllNotificationsRead } = useAppData();
+
+  const startOfDay = (d: Date) => {
+    const copy = new Date(d);
+    copy.setHours(0, 0, 0, 0);
+    return copy.getTime();
+  };
+  const today = startOfDay(new Date());
+  const yesterday = today - 86_400_000;
+
+  const todayItems = notifications.filter((n) => startOfDay(new Date(n.created_at)) === today);
+  const yesterdayItems = notifications.filter((n) => startOfDay(new Date(n.created_at)) === yesterday);
+  const earlierItems = notifications.filter((n) => {
+    const day = startOfDay(new Date(n.created_at));
+    return day !== today && day !== yesterday;
+  });
 
   const iconFor = (type: NotificationType) => {
     switch (type) {
@@ -45,15 +60,21 @@ export default function NotificacionesScreen() {
         showBack
         size="md"
         right={
-          <Pressable>
+          <Pressable onPress={() => markAllNotificationsRead()}>
             <Text style={{ color: theme.primary, fontFamily: Fonts.bodyMedium, fontSize: 12 }}>Marcar todo</Text>
           </Pressable>
         }
       />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.center}>
-          <Group title="Hoy" items={today} iconFor={iconFor} />
-          <Group title="Ayer" items={yesterday} iconFor={iconFor} />
+          {notifications.length === 0 && (
+            <Text style={{ color: theme.textFaint, fontFamily: Fonts.body, fontSize: 13, textAlign: 'center', marginTop: Spacing.six }}>
+              No tienes notificaciones todavía.
+            </Text>
+          )}
+          <Group title="Hoy" items={todayItems} iconFor={iconFor} onPress={markNotificationRead} />
+          <Group title="Ayer" items={yesterdayItems} iconFor={iconFor} onPress={markNotificationRead} />
+          <Group title="Anteriores" items={earlierItems} iconFor={iconFor} onPress={markNotificationRead} />
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -64,10 +85,12 @@ function Group({
   title,
   items,
   iconFor,
+  onPress,
 }: {
   title: string;
-  items: typeof NOTIFICATIONS;
+  items: NotificationRow[];
   iconFor: (t: NotificationType) => { Icon: React.ComponentType<any>; bg: string; color: string };
+  onPress: (id: string) => void;
 }) {
   const theme = useTheme();
   if (items.length === 0) return null;
@@ -79,18 +102,22 @@ function Group({
       {items.map((n) => {
         const { Icon, bg, color } = iconFor(n.type);
         return (
-          <Card key={n.id} style={styles.row} padding={13}>
-            <View style={[styles.iconWrap, { backgroundColor: bg }]}>
-              <Icon size={17} color={color} />
-            </View>
-            <View style={styles.flexGrow}>
-              <Text style={{ color: theme.text, fontFamily: Fonts.bodyMedium, fontSize: 13.5, lineHeight: 18 }}>
-                {n.title}
-              </Text>
-              <Text style={{ color: theme.textFaint, fontFamily: Fonts.body, fontSize: 11 }}>{n.timeLabel}</Text>
-            </View>
-            {n.unread && <View style={[styles.unreadDot, { backgroundColor: theme.primary }]} />}
-          </Card>
+          <Pressable key={n.id} onPress={() => n.unread && onPress(n.id)}>
+            <Card style={styles.row} padding={13}>
+              <View style={[styles.iconWrap, { backgroundColor: bg }]}>
+                <Icon size={17} color={color} />
+              </View>
+              <View style={styles.flexGrow}>
+                <Text style={{ color: theme.text, fontFamily: Fonts.bodyMedium, fontSize: 13.5, lineHeight: 18 }}>
+                  {n.title}
+                </Text>
+                <Text style={{ color: theme.textFaint, fontFamily: Fonts.body, fontSize: 11 }}>
+                  {relativeTimeLabel(n.created_at)}
+                </Text>
+              </View>
+              {n.unread && <View style={[styles.unreadDot, { backgroundColor: theme.primary }]} />}
+            </Card>
+          </Pressable>
         );
       })}
     </View>

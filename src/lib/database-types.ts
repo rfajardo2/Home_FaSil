@@ -80,3 +80,16 @@ export type ExpenseRow = {
   /** Embedded via PostgREST (`expense_splits(*)`). */
   expense_splits: ExpenseSplitRow[];
 };
+
+export type NotificationType = 'tarea' | 'factura' | 'ranking' | 'recomendacion' | 'logro' | 'gasto';
+
+export type NotificationRow = {
+  id: string;
+  profile_id: string;
+  group_id: string | null;
+  type: NotificationType;
+  title: string;
+  body: string | null;
+  unread: boolean;
+  created_at: string;
+};

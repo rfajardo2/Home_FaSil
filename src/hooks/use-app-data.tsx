@@ -1,16 +1,18 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import { CATEGORIES } from '@/constants/theme';
-import { GROUPS, MEMBERS, RECENT_EXPENSES, SHARED_ACCOUNTS, TASKS } from '@/data/mock';
+import { GROUPS, MEMBERS, NOTIFICATIONS, RECENT_EXPENSES, SHARED_ACCOUNTS, TASKS } from '@/data/mock';
 import { useAuth } from '@/hooks/use-auth';
 import type {
   CategoryRow,
   ExpenseRow,
   GroupMembership,
   MemberRow,
+  NotificationRow,
   SharedAccountRow,
   TaskRow,
 } from '@/lib/database-types';
+import { formatMoney } from '@/lib/format-money';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 
 // ---------------------------------------------------------------------------
@@ -107,6 +109,21 @@ const MOCK_EXPENSES: ExpenseRow[] = RECENT_EXPENSES.map((e, i) => {
   };
 });
 
+function hoursAgo(n: number) {
+  return new Date(Date.now() - n * 3_600_000).toISOString();
+}
+
+const MOCK_NOTIFICATIONS: NotificationRow[] = NOTIFICATIONS.map((n, i) => ({
+  id: n.id,
+  profile_id: MEMBERS[0].id,
+  group_id: MOCK_GROUPS[0].id,
+  type: n.type,
+  title: n.title,
+  body: null,
+  unread: n.unread,
+  created_at: hoursAgo(i + 1),
+}));
+
 // ---------------------------------------------------------------------------
 
 type NewTaskInput = {
@@ -139,6 +156,7 @@ type AppDataContextValue = {
   tasks: TaskRow[];
   sharedAccounts: SharedAccountRow[];
   expenses: ExpenseRow[];
+  notifications: NotificationRow[];
   createGroup: (name: string, emoji: string) => Promise<{ error: string | null }>;
   joinGroupByCode: (code: string) => Promise<{ error: string | null }>;
   createCategory: (name: string, icon: string, color: string) => Promise<{ error: string | null }>;
@@ -147,6 +165,8 @@ type AppDataContextValue = {
   claimTask: (task: TaskRow) => Promise<void>;
   createExpense: (input: NewExpenseInput) => Promise<{ error: string | null }>;
   settleExpense: (expenseId: string) => Promise<void>;
+  markNotificationRead: (id: string) => Promise<void>;
+  markAllNotificationsRead: () => Promise<void>;
 };
 
 const AppDataContext = createContext<AppDataContextValue | null>(null);
@@ -166,6 +186,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [tasks, setTasks] = useState<TaskRow[]>(isSupabaseConfigured ? [] : MOCK_TASKS);
   const [sharedAccounts, setSharedAccounts] = useState<SharedAccountRow[]>(isSupabaseConfigured ? [] : MOCK_SHARED_ACCOUNTS);
   const [expenses, setExpenses] = useState<ExpenseRow[]>(isSupabaseConfigured ? [] : MOCK_EXPENSES);
+  const [notifications, setNotifications] = useState<NotificationRow[]>(isSupabaseConfigured ? [] : MOCK_NOTIFICATIONS);
 
   const loadGroups = useCallback(async (): Promise<GroupMembership[]> => {
     if (!isSupabaseConfigured || !userId) return [];
@@ -182,6 +203,21 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     setGroups(rows);
     setActiveGroupIdState((current) => (current && rows.some((g) => g.id === current) ? current : (rows[0]?.id ?? null)));
     return rows;
+  }, [userId]);
+
+  const loadNotifications = useCallback(async () => {
+    if (!isSupabaseConfigured || !userId) return;
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('profile_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (error) {
+      console.warn('[app-data] no se pudieron cargar las notificaciones:', error.message);
+      return;
+    }
+    setNotifications((data as NotificationRow[]) ?? []);
   }, [userId]);
 
   const loadGroupContent = useCallback(async (groupId: string) => {
@@ -225,10 +261,12 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       setTasks([]);
       setSharedAccounts([]);
       setExpenses([]);
+      setNotifications([]);
       return;
     }
     loadGroups();
-  }, [userId, loadGroups]);
+    loadNotifications();
+  }, [userId, loadGroups, loadNotifications]);
 
   useEffect(() => {
     if (!isSupabaseConfigured || !activeGroupId) return;
@@ -287,6 +325,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       recurrence: input.recurrence,
     });
     if (error) return { error: error.message };
+    if (input.assigneeId && input.assigneeId !== userId) {
+      await notify(input.assigneeId, 'tarea', `Te asignaron: ${input.title}`);
+    }
     await loadGroupContent(activeGroupId);
     return { error: null };
   }
@@ -304,6 +345,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         .from('task_occurrences')
         .insert({ task_id: task.id, group_id: task.group_id, completed_by: userId, points_awarded: task.points });
       if (occError) console.warn('[app-data] no se pudo registrar la finalización:', occError.message);
+      const actorName = members.find((m) => m.id === userId)?.name ?? 'Alguien';
+      await notifyOtherMembers('tarea', `${actorName} completó: ${task.title}`);
     }
     if (activeGroupId) await loadGroupContent(activeGroupId);
   }
@@ -361,8 +404,48 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     const { error: splitsError } = await supabase.from('expense_splits').insert(splits);
     if (splitsError) return { error: splitsError.message };
 
+    const actorName = members.find((m) => m.id === userId)?.name ?? 'Alguien';
+    await notifyOtherMembers('gasto', `${actorName} agregó un gasto: ${input.merchant} ${formatMoney(input.total)}`);
+
     await loadGroupContent(activeGroupId);
     return { error: null };
+  }
+
+  /** Notifies a single group member (used when a specific person is directly affected, e.g. a task assignment). */
+  async function notify(profileId: string, type: NotificationRow['type'], title: string) {
+    if (!isSupabaseConfigured || !activeGroupId) return;
+    const { error } = await supabase.from('notifications').insert({ profile_id: profileId, group_id: activeGroupId, type, title });
+    if (error) console.warn('[app-data] no se pudo crear la notificación:', error.message);
+  }
+
+  /** Notifies every OTHER member of the active group (used for group-wide activity like a completed task or a new expense). */
+  async function notifyOtherMembers(type: NotificationRow['type'], title: string) {
+    if (!isSupabaseConfigured || !activeGroupId || !userId) return;
+    const targets = members.filter((m) => m.id !== userId);
+    if (targets.length === 0) return;
+    const rows = targets.map((m) => ({ profile_id: m.id, group_id: activeGroupId, type, title }));
+    const { error } = await supabase.from('notifications').insert(rows);
+    if (error) console.warn('[app-data] no se pudieron crear notificaciones:', error.message);
+  }
+
+  async function markNotificationRead(id: string) {
+    if (!isSupabaseConfigured) return;
+    const { error } = await supabase.from('notifications').update({ unread: false }).eq('id', id);
+    if (error) {
+      console.warn('[app-data] no se pudo marcar la notificación:', error.message);
+      return;
+    }
+    await loadNotifications();
+  }
+
+  async function markAllNotificationsRead() {
+    if (!isSupabaseConfigured || !userId) return;
+    const { error } = await supabase.from('notifications').update({ unread: false }).eq('profile_id', userId).eq('unread', true);
+    if (error) {
+      console.warn('[app-data] no se pudieron marcar las notificaciones:', error.message);
+      return;
+    }
+    await loadNotifications();
   }
 
   async function settleExpense(expenseId: string) {
@@ -385,6 +468,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     tasks,
     sharedAccounts,
     expenses,
+    notifications,
     createGroup,
     joinGroupByCode,
     createCategory,
@@ -393,6 +477,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     claimTask,
     createExpense,
     settleExpense,
+    markNotificationRead,
+    markAllNotificationsRead,
   };
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;
