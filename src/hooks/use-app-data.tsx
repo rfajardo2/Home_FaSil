@@ -175,6 +175,7 @@ type AppDataContextValue = {
   createGroup: (name: string, emoji: string) => Promise<{ error: string | null }>;
   joinGroupByCode: (code: string) => Promise<{ error: string | null }>;
   leaveGroup: (groupId: string) => Promise<{ error: string | null }>;
+  regenerateInviteCode: (groupId: string) => Promise<{ error: string | null }>;
   createCategory: (name: string, icon: string, color: string) => Promise<{ error: string | null }>;
   createTask: (input: NewTaskInput) => Promise<{ error: string | null }>;
   toggleTask: (task: TaskRow) => Promise<void>;
@@ -374,6 +375,14 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     return { error: null };
   }
 
+  async function regenerateInviteCode(groupId: string): Promise<{ error: string | null }> {
+    if (!isSupabaseConfigured) return { error: 'Supabase no está configurado.' };
+    const { error } = await supabase.rpc('regenerate_invite_code', { target_group_id: groupId });
+    if (error) return { error: error.message };
+    await loadGroups();
+    return { error: null };
+  }
+
   async function createCategory(name: string, icon: string, color: string): Promise<{ error: string | null }> {
     if (!isSupabaseConfigured || !activeGroupId) return { error: 'Selecciona un grupo primero.' };
     const { error } = await supabase.from('categories').insert({ group_id: activeGroupId, name, icon, color, is_default: false });
@@ -566,6 +575,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     createGroup,
     joinGroupByCode,
     leaveGroup,
+    regenerateInviteCode,
     createCategory,
     createTask,
     toggleTask,

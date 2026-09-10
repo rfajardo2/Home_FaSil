@@ -235,6 +235,15 @@ export function LightbulbIcon({ size = 20, color = '#000', strokeWidth = 1.8 }: 
   );
 }
 
+export function CopyIcon({ size = 20, color = '#000', strokeWidth = 1.8 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Rect x={8.5} y={8.5} width={13} height={13} rx={2.2} stroke={color} {...base(strokeWidth)} />
+      <Path d="M4.5 15.5v-10a2 2 0 0 1 2-2h10" stroke={color} {...base(strokeWidth)} />
+    </Svg>
+  );
+}
+
 export function ClockIcon({ size = 20, color = '#000', strokeWidth = 1.8 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">

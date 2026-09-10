@@ -213,6 +213,31 @@ $$;
 
 grant execute on function public.join_group_by_invite_code(text) to authenticated;
 
+-- Lets a group admin invalidate the current invite code and get a fresh one
+-- (e.g. after sharing it too widely). SECURITY DEFINER so it can update
+-- `groups` regardless of RLS — which is exactly why it must check
+-- is_group_admin itself: without that check, ANY authenticated caller could
+-- regenerate ANY group's code, since this function bypasses RLS entirely.
+create or replace function public.regenerate_invite_code(target_group_id uuid)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  new_code text;
+begin
+  if not public.is_group_admin(target_group_id) then
+    raise exception 'Solo un administrador puede regenerar el código de invitación.';
+  end if;
+  new_code := substr(md5(random()::text || clock_timestamp()::text), 1, 8);
+  update public.groups set invite_code = new_code where id = target_group_id;
+  return new_code;
+end;
+$$;
+
+grant execute on function public.regenerate_invite_code(uuid) to authenticated;
+
 -- ----------------------------------------------------------------------------
 -- categories  (per-group; defaults seeded + custom ones allowed)
 -- ----------------------------------------------------------------------------
