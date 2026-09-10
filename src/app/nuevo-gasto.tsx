@@ -8,6 +8,7 @@ import { PlusIcon } from '@/components/icons';
 import { Avatar } from '@/components/ui/Avatar';
 import { PrimaryButton } from '@/components/ui/Button';
 import { Header } from '@/components/ui/Header';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { BottomTabInset, Fonts, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { useAppData } from '@/hooks/use-app-data';
 import { useAuth } from '@/hooks/use-auth';
@@ -28,8 +29,20 @@ export default function NuevoGastoScreen() {
   const displayTotal = total ? formatMoney(Number(total)) : '';
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [paidBy, setPaidBy] = useState<string | null>(session?.user?.id ?? null);
+  const [splitMode, setSplitMode] = useState<'todos' | 'elegir'>('todos');
+  const [splitIds, setSplitIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Members load asynchronously; start the "elegir" picker fully checked
+  // (everyone included) so the user only has to uncheck who to exclude.
+  useEffect(() => {
+    setSplitIds((current) => (current.length === 0 ? members.map((m) => m.id) : current));
+  }, [members]);
+
+  function toggleSplitMember(id: string) {
+    setSplitIds((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
+  }
 
   // Shared accounts load asynchronously; default to the first one (or "new
   // account" mode if there really are none) once they arrive, without
@@ -64,6 +77,10 @@ export default function NuevoGastoScreen() {
       setError('Elige o crea una cuenta compartida.');
       return;
     }
+    if (splitMode === 'elegir' && splitIds.length === 0) {
+      setError('Elige al menos un integrante para dividir el gasto.');
+      return;
+    }
     setSaving(true);
     const { error: saveError } = await createExpense({
       accountId,
@@ -72,6 +89,7 @@ export default function NuevoGastoScreen() {
       total: totalNumber,
       categoryId,
       paidBy,
+      splitMemberIds: splitMode === 'todos' ? null : splitIds,
     });
     setSaving(false);
     if (saveError) {
@@ -198,9 +216,41 @@ export default function NuevoGastoScreen() {
                 </Pressable>
               ))}
             </View>
-            <Text style={{ color: theme.textFaint, fontFamily: Fonts.body, fontSize: 11 }}>
-              Se divide en partes iguales entre los {members.length || 0} integrantes del grupo.
-            </Text>
+          </Field>
+
+          <Field label="¿Entre quién se divide?">
+            <SegmentedControl
+              value={splitMode}
+              onChange={(v) => setSplitMode(v as typeof splitMode)}
+              options={[
+                { value: 'todos', label: 'Todos' },
+                { value: 'elegir', label: 'Elegir integrantes' },
+              ]}
+            />
+            {splitMode === 'elegir' ? (
+              <View style={styles.avatarRow}>
+                {members.map((m) => {
+                  const checked = splitIds.includes(m.id);
+                  return (
+                    <Pressable key={m.id} onPress={() => toggleSplitMember(m.id)} style={styles.avatarCol}>
+                      <Avatar initials={m.initials} color={m.avatar_color} size={50} selected={checked} faded={!checked} />
+                      <Text
+                        style={{
+                          color: checked ? theme.text : theme.textFaint,
+                          fontFamily: Fonts.bodyMedium,
+                          fontSize: 11,
+                        }}>
+                        {m.id === session?.user?.id ? 'Tú' : m.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : (
+              <Text style={{ color: theme.textFaint, fontFamily: Fonts.body, fontSize: 11 }}>
+                Se divide en partes iguales entre los {members.length || 0} integrantes del grupo.
+              </Text>
+            )}
           </Field>
 
           {error && <Text style={{ color: theme.danger, fontFamily: Fonts.body, fontSize: 12.5 }}>{error}</Text>}

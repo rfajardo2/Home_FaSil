@@ -154,6 +154,8 @@ type NewExpenseInput = {
   total: number;
   categoryId: string | null;
   paidBy: string;
+  /** Profile ids to split the expense between. `null` means "everyone in the group". */
+  splitMemberIds: string[] | null;
 };
 
 type AppDataContextValue = {
@@ -473,8 +475,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       .single();
     if (expenseError) return { error: expenseError.message };
 
-    const shareAmount = Math.round((input.total / (members.length || 1)) * 100) / 100;
-    const splits = members.map((m) => ({
+    const splitMembers = input.splitMemberIds
+      ? members.filter((m) => input.splitMemberIds!.includes(m.id))
+      : members;
+    const shareAmount = Math.round((input.total / (splitMembers.length || 1)) * 100) / 100;
+    const splits = splitMembers.map((m) => ({
       expense_id: expense.id,
       group_id: activeGroupId,
       profile_id: m.id,
