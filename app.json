@@ -8,9 +8,11 @@
     "scheme": "homehubapp",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.fajardoscompany.homehub"
     },
     "android": {
+      "package": "com.fajardoscompany.homehub",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -37,6 +39,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "2eccb967-5f23-4667-8fec-6ce5a5f541a7"
+      }
+    },
+    "owner": "rfajardo"
   }
 }
